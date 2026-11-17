@@ -4,6 +4,10 @@ import { History } from './ui/History';
 import { Home } from './ui/Home';
 import { Progress } from './ui/Progress';
 import { SessionDetail } from './ui/SessionDetail';
+import { SettingsScreen } from './ui/Settings';
+import { StravaActions } from './ui/StravaActions';
+import * as db from './io/db';
+import { handleOAuthRedirect } from './io/strava';
 import { Ride } from './ui/Ride';
 
 export function navigate(path: string): void {
@@ -31,22 +35,50 @@ const TABS: [string, string][] = [
   ['/parametres', 'Réglages'],
 ];
 
-function Screen({ path }: { path: string }) {
+function Screen({ path, notice }: { path: string; notice: string }) {
   if (path === '/connexion') return <Connect />;
   if (path === '/seance') return <Ride />;
   if (path === '/') return <Home />;
   if (path === '/historique') return <History />;
-  if (path.startsWith('/historique/')) return <SessionDetail id={decodeURIComponent(path.slice(12))} />;
+  if (path.startsWith('/historique/')) return <SessionDetail id={decodeURIComponent(path.slice(12))} actions={(s, reload) => <StravaActions session={s} reload={reload} />} />;
   if (path === '/progression') return <Progress />;
+  if (path === '/parametres') return <SettingsScreen notice={notice} />;
   return <div><h1>Page introuvable</h1><a href="#/">Accueil</a></div>;
 }
 
+/** Retour de Strava après autorisation (?code=…). */
+function useStravaRedirect(): [boolean, string] {
+  const [state, setState] = useState<[boolean, string]>([!location.search.includes('code=') && !location.search.includes('error='), '']);
+  useEffect(() => {
+    if (state[0]) return;
+    (async () => {
+      let notice = '';
+      try {
+        const r = await handleOAuthRedirect(await db.getSettings(), location.href);
+        if (r) {
+          await db.saveSettings(r.settings);
+          history.replaceState(null, '', r.cleanUrl.split('#')[0] + '#/parametres');
+          notice = 'Strava est connecté ✓';
+        }
+      } catch (e) {
+        history.replaceState(null, '', location.pathname + '#/parametres');
+        notice = (e as Error).message;
+      }
+      setState([true, notice]);
+      dispatchEvent(new HashChangeEvent('hashchange'));
+    })();
+  }, []);
+  return state;
+}
+
 export function App() {
+  const [ready, notice] = useStravaRedirect();
   const path = useRoute();
+  if (!ready) return <main><p class="muted">Connexion à Strava…</p></main>;
   const inRide = path === '/seance';
   return (
     <div class="app">
-      <main><Screen path={path} /></main>
+      <main><Screen path={path} notice={notice} /></main>
       {!inRide && (
         <nav class="tabs">
           {TABS.map(([p, label]) => (
