@@ -44,3 +44,24 @@ test('pas de FC quand elle manque, puissance et vitesse en extension', () => {
   expect(tps[0].getElementsByTagName('ns3:Watts')[0].textContent).toBe('213');
   expect(Number(tps[0].getElementsByTagName('ns3:Speed')[0].textContent)).toBeCloseTo(30 / 3.6, 3);
 });
+
+test('séance guidée : un tour par étape effectuée', () => {
+  const s2: Sample[] = [
+    { t: 1, distM: 8, speed: 30, hr: 140, power: 150, level: 3, step: 0 },
+    { t: 2, distM: 16, speed: 30, hr: 141, power: 150, level: 3, step: 0 },
+    { t: 3, distM: 25, speed: 32, hr: 150, power: 250, level: 3, step: 1 },
+    { t: 4, distM: 34, speed: 32, hr: 152, power: 250, level: 3 },
+  ];
+  const sess: Session = { id: 'g', startedAt: '2026-11-17T18:00:00.000Z', samples: s2, summary: summarize(s2, 190),
+    workout: { name: 'W', ftp: 250, steps: [{ durationS: 2, kind: 'warmup', pct: 60 }, { durationS: 60, kind: 'work', pct: 100 }], results: [] } };
+  const doc = parse(toTcx(sess));
+  const laps = doc.getElementsByTagName('Lap');
+  expect(laps).toHaveLength(3); // étape 0, étape 1, roue libre après la fin
+  const lapTp = (i: number) => laps[i].getElementsByTagName('Trackpoint').length;
+  expect([lapTp(0), lapTp(1), lapTp(2)]).toEqual([2, 1, 1]);
+  expect(laps[1].getAttribute('StartTime')).toBe('2026-11-17T18:00:03.000Z');
+  const own = (lap: Element, tag: string) => [...lap.children].find((c) => c.tagName === tag)!.textContent;
+  expect(Number(own(laps[1], 'TotalTimeSeconds'))).toBe(1);
+  expect(Number(own(laps[1], 'DistanceMeters'))).toBeCloseTo(9, 2);
+  expect(Number(own(laps[0], 'DistanceMeters'))).toBeCloseTo(16, 2);
+});

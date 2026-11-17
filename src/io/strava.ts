@@ -31,7 +31,7 @@ async function call(url: string, init: RequestInit): Promise<Response> {
 async function tokenRequest(params: Record<string, string>) {
   const res = await call(TOKEN, { method: 'POST', body: new URLSearchParams(params) });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(`Strava a refusé la connexion (${res.status}). Vérifie le Client ID et le Client Secret.`);
+  if (!res.ok) throw new Error(`Strava a refusé la connexion (${res.status}). Vérifie le Client ID et le Client Secret, ou reconnecte Strava si tu as retiré l'accès.`);
   return data as { access_token: string; refresh_token: string; expires_at: number; athlete?: { firstname?: string } };
 }
 
@@ -68,13 +68,29 @@ export async function ensureFreshToken(settings: Settings): Promise<Settings> {
 
 interface UploadStatus { id: number; status: string; activity_id: number | null; error: string | null }
 
-function uploadError(u: UploadStatus): Error {
-  if (/duplicate/i.test(u.error ?? '')) return new Error('Déjà présente sur Strava');
+export interface UploadResult { activityId: number; duplicate?: boolean }
+
+/** Erreur d'envoi ; un doublon avec numéro d'activité est un succès (la séance est déjà sur Strava). */
+function settle(u: UploadStatus): UploadResult | Error {
+  if (/duplicate/i.test(u.error ?? '')) {
+    const m = /activit(?:y|ies)\/?\s*(\d+)/i.exec(u.error ?? '');
+    return m ? { activityId: Number(m[1]), duplicate: true } : new Error('Déjà présente sur Strava');
+  }
   return new Error(`Strava n'a pas accepté la séance : ${u.error}`);
 }
 
+async function readStatus(res: Response): Promise<UploadStatus> {
+  if (res.status === 401) throw new Error('Session Strava expirée : reconnecte Strava dans les Réglages.');
+  if (!res.ok) throw new Error(`Strava a répondu par une erreur (${res.status}). Réessaie plus tard ou utilise « Exporter .tcx ».`);
+  try {
+    return (await res.json()) as UploadStatus;
+  } catch {
+    throw new Error(`Réponse inattendue de Strava (${res.status}).`);
+  }
+}
+
 /** Envoie la séance (TCX) puis attend que Strava l'ait traitée. Les réglages doivent avoir un jeton valide. */
-export async function uploadSession(s: Session, settings: Settings): Promise<{ activityId: number }> {
+export async function uploadSession(s: Session, settings: Settings): Promise<UploadResult> {
   const token = settings.strava?.accessToken;
   if (!token) throw new Error('Strava n\'est pas connecté. Va dans Réglages → Strava.');
   const headers = { Authorization: `Bearer ${token}` };
@@ -82,19 +98,19 @@ export async function uploadSession(s: Session, settings: Settings): Promise<{ a
   fd.append('file', new Blob([toTcx(s)], { type: 'application/vnd.garmin.tcx+xml' }), `${s.id}.tcx`);
   fd.append('data_type', 'tcx');
   fd.append('trainer', '1');
-  fd.append('name', 'Home trainer');
+  fd.append('name', s.workout ? `Home trainer · ${s.workout.name}` : 'Home trainer');
   fd.append('external_id', `${s.id}.tcx`);
-  const res = await call(`${API}/uploads`, { method: 'POST', headers, body: fd });
-  if (res.status === 401) throw new Error('Session Strava expirée : reconnecte Strava dans les Réglages.');
-  let u = (await res.json()) as UploadStatus;
-  if (!res.ok) throw new Error(`Envoi refusé par Strava (${res.status}).`);
-  for (let i = 0; i < POLL_MAX; i++) {
-    if (u.error) throw uploadError(u);
+  let u = await readStatus(await call(`${API}/uploads`, { method: 'POST', headers, body: fd }));
+  for (let i = 0; ; i++) {
+    if (u.error) {
+      const r = settle(u);
+      if (r instanceof Error) throw r;
+      return r;
+    }
     if (u.activity_id) return { activityId: u.activity_id };
+    if (i >= POLL_MAX) break;
     await new Promise((r) => setTimeout(r, POLL_MS));
-    u = (await (await call(`${API}/uploads/${u.id}`, { headers })).json()) as UploadStatus;
+    u = await readStatus(await call(`${API}/uploads/${u.id}`, { headers }));
   }
-  if (u.error) throw uploadError(u);
-  if (u.activity_id) return { activityId: u.activity_id };
   throw new Error('Strava met du temps à traiter la séance. Vérifie sur Strava dans quelques minutes.');
 }

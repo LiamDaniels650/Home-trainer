@@ -21,9 +21,9 @@ export function StravaActions({ session, reload }: { session: Session; reload: (
       if (!isStravaConnected(st)) throw new Error('Strava n\'est pas encore connecté : va dans Réglages → Strava.');
       const fresh = await ensureFreshToken(st);
       if (fresh !== st) await db.saveSettings((st = fresh));
-      const { activityId } = await uploadSession(session, st);
+      const { activityId, duplicate } = await uploadSession(session, st);
       await db.saveSession({ ...session, stravaId: activityId });
-      setMsg({ ok: true, text: 'Séance envoyée sur Strava ✓' });
+      setMsg({ ok: true, text: duplicate ? 'Cette séance était déjà sur Strava ✓' : 'Séance envoyée sur Strava ✓' });
       reload();
     } catch (e) {
       setMsg({ ok: false, text: (e as Error).message });

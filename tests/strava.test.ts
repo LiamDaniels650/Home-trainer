@@ -83,14 +83,45 @@ test('envoi puis attente de traitement → id de l\'activité', async () => {
   expect(fetchMock.mock.calls[1][0]).toBe('https://www.strava.com/api/v3/uploads/7');
 });
 
-test('doublon signalé par Strava', async () => {
+test('doublon signalé par Strava : la séance est considérée comme envoyée', async () => {
   fetchMock
     .mockResolvedValueOnce(json({ id: 8, status: 'processing', activity_id: null, error: null }, 201))
     .mockResolvedValueOnce(json({ id: 8, status: 'There was an error processing your activity.', activity_id: null, error: 'sess-1.tcx duplicate of activity 123' }));
   const p = uploadSession(session, connected);
-  const assertion = expect(p).rejects.toThrow('Déjà présente sur Strava');
   await vi.runAllTimersAsync();
-  await assertion;
+  expect(await p).toEqual({ activityId: 123, duplicate: true });
+});
+
+test('doublon au format lien HTML', async () => {
+  fetchMock.mockResolvedValueOnce(json({ id: 9, status: 'x', activity_id: null, error: "a.tcx duplicate of <a href='/activities/4567'>Sortie</a>" }, 201));
+  expect(await uploadSession(session, connected)).toEqual({ activityId: 4567, duplicate: true });
+});
+
+test('doublon sans numéro : message clair', async () => {
+  fetchMock.mockResolvedValueOnce(json({ id: 9, status: 'x', activity_id: null, error: 'duplicate' }, 201));
+  await expect(uploadSession(session, connected)).rejects.toThrow('Déjà présente sur Strava');
+});
+
+test("nom de l'activité : nom de la séance guidée", async () => {
+  fetchMock.mockResolvedValueOnce(json({ id: 1, status: 'ok', activity_id: 5, error: null }, 201));
+  const guided = { ...session, workout: { name: 'Sweet spot 3 × 10 min', ftp: 250, steps: [], results: [] } };
+  await uploadSession(guided, connected);
+  expect((fetchMock.mock.calls[0][1].body as FormData).get('name')).toBe('Home trainer · Sweet spot 3 × 10 min');
+});
+
+test('réponse non JSON : message français', async () => {
+  fetchMock.mockResolvedValueOnce(new Response('<html>502</html>', { status: 502 }));
+  await expect(uploadSession(session, connected)).rejects.toThrow(/Strava.*502/);
+});
+
+test("erreur pendant l'attente de traitement : message français", async () => {
+  fetchMock
+    .mockResolvedValueOnce(json({ id: 7, status: 'processing', activity_id: null, error: null }, 201))
+    .mockResolvedValueOnce(json({ message: 'Rate Limit Exceeded' }, 429));
+  const p = uploadSession(session, connected);
+  const check = expect(p).rejects.toThrow(/Strava.*429/);
+  await vi.runAllTimersAsync();
+  await check;
 });
 
 test('erreur réseau : message français proposant l\'export', async () => {
