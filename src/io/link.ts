@@ -49,6 +49,8 @@ export class SensorLink {
     this.set('connexion');
     try {
       await this.open();
+      // « Déconnecter » touché pendant la connexion : on referme ce qui vient d'aboutir.
+      if (!this.wanted) throw new Error('Connexion annulée.');
     } catch (e) {
       this.wanted = false;
       this.dev.close();
@@ -95,8 +97,13 @@ export class SensorLink {
     this.lastDataAt = Date.now();
     this.set('connecte');
     clearInterval(this.watchdog);
+    let lastTick = Date.now();
     this.watchdog = setInterval(() => {
-      if (this.state === 'connecte' && Date.now() - this.lastDataAt > this.opts.watchdogMs) {
+      const now = Date.now();
+      const asleep = now - lastTick > 3000; // l'app était en arrière-plan : minuteries suspendues
+      lastTick = now;
+      if (asleep) { this.lastDataAt = now; return; }
+      if (this.state === 'connecte' && now - this.lastDataAt > this.opts.watchdogMs) {
         this.dev.close();
         this.lost();
       }
@@ -130,6 +137,10 @@ export class SensorLink {
       this.schedule();
       return;
     }
-    if (this.wanted) this.connected();
+    if (!this.wanted) {
+      this.dev.close(); // arrêté pendant la tentative : ne pas laisser le capteur connecté
+      return;
+    }
+    this.connected();
   }
 }

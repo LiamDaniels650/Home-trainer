@@ -26,7 +26,7 @@ function SensorCard({ kind, title, hint }: { kind: SensorKind; title: string; hi
             setErr('');
             try { await s.connect(kind); } catch (e) {
               const msg = (e as Error).message || String(e);
-              if (!/cancel/i.test(msg)) setErr(msg);
+              if (!/cancel|annul/i.test(msg)) setErr(msg);
             }
           }}>Connecter</button>
         ) : (
@@ -49,6 +49,9 @@ export function Connect() {
   return (
     <div>
       <h1>Capteurs</h1>
+      {pendingWorkout() && resuming && (
+        <div class="banner small">Une séance précédente n'est pas terminée : elle sera reprise d'abord. Termine-la depuis l'accueil pour lancer « {pendingWorkout()!.name} ».</div>
+      )}
       {pendingWorkout() && !activeRide() && !resuming && (
         <div class="card row"><span>Séance guidée : <b>{pendingWorkout()!.name}</b></span>
           <button class="mini" onClick={() => { setPendingWorkout(null); force((n) => n + 1); }}>Retirer</button></div>

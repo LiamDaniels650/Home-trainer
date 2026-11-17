@@ -26,12 +26,13 @@ export function WorkoutEditor({ editId, fromId }: { editId?: string; fromId?: st
   const [w, setW] = useState<Workout | null>(null);
   const [repeat, setRepeat] = useState({ n: 4, work: '4:00', workPct: 105, rest: '3:00', restPct: 55 });
   const [err, setErr] = useState('');
+  const [missing, setMissing] = useState(false);
 
   useEffect(() => {
     (async () => {
       if (editId) {
         const found = await findWorkout(editId);
-        setW(found && !found.builtin ? found : null);
+        if (found && !found.builtin) setW(found); else setMissing(true);
       } else if (fromId) {
         const src = await findWorkout(fromId);
         setW({ id: newId(), name: src ? `${src.name} (copie)` : 'Nouvelle séance', steps: src ? src.steps.map((s) => ({ ...s })) : DEFAULT_STEPS });
@@ -41,7 +42,9 @@ export function WorkoutEditor({ editId, fromId }: { editId?: string; fromId?: st
     })();
   }, [editId, fromId]);
 
+  if (missing) return <div><h1>Séance introuvable</h1><a href="#/seances">‹ Séances</a></div>;
   if (!w) return <div><p class="muted">Chargement…</p></div>;
+  const pctInput = (v: string, prev: number) => { const p = Math.round(Number(v)); return p >= 20 && p <= 250 ? p : prev; };
   const setStep = (i: number, patch: Partial<WorkoutStep>) => setW({ ...w, steps: w.steps.map((s, j) => (j === i ? { ...s, ...patch } : s)) });
   const move = (i: number, d: number) => {
     const steps = [...w.steps];
@@ -102,10 +105,10 @@ export function WorkoutEditor({ editId, fromId }: { editId?: string; fromId?: st
         <div class="grid2" style="grid-template-columns:1fr 1fr 1fr">
           <div><label>Répétitions</label><input inputMode="numeric" value={repeat.n} onChange={(e) => setRepeat({ ...repeat, n: Math.min(30, Math.max(1, Number(e.currentTarget.value) || 1)) })} /></div>
           <div><label>Effort</label><input value={repeat.work} onChange={(e) => setRepeat({ ...repeat, work: e.currentTarget.value })} /></div>
-          <div><label>% FTP</label><input inputMode="numeric" value={repeat.workPct} onChange={(e) => setRepeat({ ...repeat, workPct: Number(e.currentTarget.value) || repeat.workPct })} /></div>
+          <div><label>% FTP</label><input inputMode="numeric" value={repeat.workPct} onChange={(e) => { const p = pctInput(e.currentTarget.value, repeat.workPct); e.currentTarget.value = String(p); setRepeat({ ...repeat, workPct: p }); }} /></div>
           <div />
           <div><label>Récup</label><input value={repeat.rest} onChange={(e) => setRepeat({ ...repeat, rest: e.currentTarget.value })} /></div>
-          <div><label>% FTP</label><input inputMode="numeric" value={repeat.restPct} onChange={(e) => setRepeat({ ...repeat, restPct: Number(e.currentTarget.value) || repeat.restPct })} /></div>
+          <div><label>% FTP</label><input inputMode="numeric" value={repeat.restPct} onChange={(e) => { const p = pctInput(e.currentTarget.value, repeat.restPct); e.currentTarget.value = String(p); setRepeat({ ...repeat, restPct: p }); }} /></div>
         </div>
         <button class="block" onClick={() => {
           const wd = parseDuration(repeat.work), rd = parseDuration(repeat.rest);

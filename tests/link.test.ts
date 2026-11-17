@@ -4,13 +4,14 @@ import { SensorLink, type LinkDevice } from '../src/io/link';
 class FakeDevice implements LinkDevice {
   opens = 0;
   closes = 0;
-  mode: 'ok' | 'fail' | 'hang' = 'ok';
+  mode: 'ok' | 'fail' | 'hang' | 'slow' = 'ok';
   private dropCb: (() => void) | null = null;
   private dataCb: ((dv: DataView) => void) | null = null;
   async open(onData: (dv: DataView) => void) {
     this.opens++;
     if (this.mode === 'fail') throw new Error('échec');
     if (this.mode === 'hang') return new Promise<void>(() => {});
+    if (this.mode === 'slow') { this.dataCb = onData; return new Promise<void>((r) => setTimeout(r, 3000)); }
     this.dataCb = onData;
   }
   close() { this.closes++; }
@@ -128,4 +129,42 @@ test('stop : plus aucune tentative', async () => {
   expect(states.at(-1)).toBe('deconnecte');
   await vi.advanceTimersByTimeAsync(60000);
   expect(dev.opens).toBe(1);
+});
+
+test('Déconnecter pendant la première connexion : pas de faux « connecté »', async () => {
+  dev.mode = 'slow';
+  const p = link.start();
+  link.stop();
+  await vi.advanceTimersByTimeAsync(3000);
+  await expect(p).rejects.toThrow(/annul/i);
+  expect(states.at(-1)).toBe('deconnecte');
+  expect(dev.closes).toBeGreaterThanOrEqual(2); // stop() + fermeture de la connexion arrivée trop tard
+  await vi.advanceTimersByTimeAsync(60000);
+  expect(states.at(-1)).toBe('deconnecte'); // pas de chien de garde orphelin
+  expect(link.dropouts).toBe(0);
+});
+
+test('Déconnecter pendant une reconnexion : la connexion tardive est refermée', async () => {
+  await link.start();
+  dev.mode = 'slow';
+  dev.drop();
+  await vi.advanceTimersByTimeAsync(2000); // tentative lente lancée
+  link.stop();
+  const closes = dev.closes;
+  await vi.advanceTimersByTimeAsync(3000);
+  expect(dev.closes).toBe(closes + 1);
+  expect(states.at(-1)).toBe('deconnecte');
+});
+
+test('retour de veille : pas de fausse coupure', async () => {
+  await link.start();
+  dev.send();
+  // l'app était en arrière-plan : les minuteries n'ont pas tourné pendant 60 s
+  vi.setSystemTime(Date.now() + 60000);
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(states.at(-1)).toBe('connecte');
+  expect(link.dropouts).toBe(0);
+  // mais un vrai silence est toujours détecté ensuite
+  await vi.advanceTimersByTimeAsync(9000);
+  expect(states.at(-1)).toBe('reconnexion');
 });

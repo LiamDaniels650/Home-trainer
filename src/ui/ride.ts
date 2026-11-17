@@ -135,7 +135,7 @@ export async function startRide(draft: Draft | null): Promise<RideController> {
   active?.stop();
   const st = await db.getSettings();
   const workout = draft ? undefined : pending ?? undefined;
-  pending = null;
+  if (!draft) pending = null; // en cas de reprise, la séance choisie reste en attente
   const rec = draft
     ? Recorder.restore(draft)
     : new Recorder({ startedAt: new Date(), level: st.defaultLevel, calib: st.calib, hrMax: st.hrMax, autoPause: st.autoPause, workout, ftp: st.ftp });

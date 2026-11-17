@@ -9,6 +9,7 @@ import { ConfirmButton } from './ConfirmButton';
 import { KIND_LABELS, powerStatus, speedForPower, targetWatts } from '../core/workout';
 import { WorkoutProfile } from './WorkoutProfile';
 import type { RideView } from './ride';
+import { unlockAudio } from '../io/audio';
 
 function WorkoutPanel({ v, steps, name }: { v: RideView; steps: import('../core/types').WorkoutStep[]; name: string }) {
   if (v.workoutDone) {
@@ -19,7 +20,7 @@ function WorkoutPanel({ v, steps, name }: { v: RideView; steps: import('../core/
   const target = targetWatts(pos.step.pct, v.ftp);
   const speed = speedForPower(target, v.level, v.calib);
   const status = v.power > 0 ? powerStatus(v.power, target) : 'low';
-  const hint = status === 'ok' ? 'Dans la cible' : status === 'low' ? 'Accélère' : 'Ralentis';
+  const hint = v.paused || v.autoPaused ? 'En pause' : status === 'ok' ? 'Dans la cible' : status === 'low' ? 'Accélère' : 'Ralentis';
   return (
     <div class="card wk">
       <div class="wk-top">
@@ -30,7 +31,7 @@ function WorkoutPanel({ v, steps, name }: { v: RideView; steps: import('../core/
         <span>Cible <b>{target} W</b> <span class="muted small">{pos.step.pct}% FTP</span></span>
         <span>Vise <b>{fmtNum(speed)}</b> km/h</span>
       </div>
-      <div class={'small st-' + status} style="margin-top:4px;font-weight:600">{hint} ({v.power} W)</div>
+      <div class={'small ' + (v.paused || v.autoPaused ? 'muted' : 'st-' + status)} style="margin-top:4px;font-weight:600">{hint}{!(v.paused || v.autoPaused) && ` (${v.power} W)`}</div>
       <div style="margin-top:8px"><WorkoutProfile steps={steps} current={pos.index} height={30} /></div>
       {pos.next && <div class="small muted" style="margin-top:6px">Ensuite : {KIND_LABELS[pos.next.kind]} {fmtDuration(pos.next.durationS)} à {targetWatts(pos.next.pct, v.ftp)} W</div>}
     </div>
@@ -71,14 +72,14 @@ export function Ride() {
         <div class="card stat big level">
           <div class="l">Niveau résistance</div>
           <div class="row">
-            <button aria-label="Niveau moins" onClick={() => ride.setLevel(v.level - 1)} disabled={v.level <= 1}>−</button>
+            <button aria-label="Niveau moins" onClick={() => { unlockAudio(); ride.setLevel(v.level - 1); }} disabled={v.level <= 1}>−</button>
             <div class="v">{v.level}</div>
-            <button aria-label="Niveau plus" onClick={() => ride.setLevel(v.level + 1)} disabled={v.level >= 8}>+</button>
+            <button aria-label="Niveau plus" onClick={() => { unlockAudio(); ride.setLevel(v.level + 1); }} disabled={v.level >= 8}>+</button>
           </div>
         </div>
       </div>
       <div class="grid2" style="margin-top:8px">
-        <button class="block" onClick={() => ride.togglePause()}>{v.paused ? 'Reprendre' : 'Pause'}</button>
+        <button class="block" onClick={() => { unlockAudio(); ride.togglePause(); }}>{v.paused ? 'Reprendre' : 'Pause'}</button>
         <ConfirmButton class="danger block" confirmLabel="Confirmer la fin" onConfirm={async () => {
           try {
             const s = await finishRide();

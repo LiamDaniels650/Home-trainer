@@ -83,7 +83,8 @@ class WebDevice implements LinkDevice {
     await ch.startNotifications();
   }
   close() {
-    try { if (this.device.gatt?.connected) this.device.gatt.disconnect(); } catch { /* déjà coupé */ }
+    // Sans condition : disconnect() annule aussi une connexion encore en cours.
+    try { this.device.gatt?.disconnect(); } catch { /* déjà coupé */ }
   }
   onDisconnected(cb: () => void) {
     this.device.addEventListener('gattserverdisconnected', cb);
@@ -115,7 +116,8 @@ class WebBluetoothSensors extends BaseSensors {
           if (r.wheelRevs != null && r.wheelTime != null) this.csc.emit({ wheelRevs: r.wheelRevs, wheelTime: r.wheelTime });
         }
       },
-      onState: (st) => this.set(kind, st),
+      // une ancienne liaison (remplacée ou arrêtée) ne doit plus changer l'état affiché
+      onState: (st) => { if (this.links[kind] === link) this.set(kind, st); },
     });
     this.links[kind] = link;
     await link.start();
