@@ -1,7 +1,7 @@
 # App Home Trainer perso : design
 
 Date : 2026-11-17
-Statut : brouillon, en attente de validation
+Statut : en attente de validation finale
 
 ## Intention
 
@@ -35,11 +35,13 @@ d'être de l'app est d'avoir des **données justes et cohérentes** d'une séanc
    (durée, distance, moyennes et max, temps dans les zones cardio).
 7. Progression : totaux par semaine et par mois, records (meilleure puissance moyenne sur 5 s, 1 min, 5 min, 20 min).
 8. Sauvegarde : export et import de tout l'historique (fichier JSON), pour ne jamais rien perdre.
+9. **Envoi vers Strava** (voir la section dédiée) : bouton « Envoyer sur Strava » à la fin de la
+   séance et dans l'historique. En secours, export d'un fichier `.tcx`.
 
 ## Non-objectifs (v1)
 
 - Pas de compte, pas de serveur, pas de partage. Les données ne quittent jamais l'iPhone,
-  sauf si l'utilisateur exporte un fichier.
+  sauf si l'utilisateur exporte un fichier ou envoie volontairement une séance sur Strava.
 - Pas de séances guidées ou fractionnées (possible en v2).
 - Pas de monde virtuel ni de carte.
 - Pas de pilotage de la résistance : c'est impossible sur un home trainer classique.
@@ -85,7 +87,8 @@ venant des courants de Foucault et du volant d'inertie.
 - Ce qui compte pour l'utilisateur, c'est la **cohérence** d'une séance à l'autre : même vitesse et même
   niveau donnent toujours la même puissance.
 - Le niveau de résistance peut être changé en cours de séance d'un appui (boutons − / +). Il est
-  enregistré avec chaque point.
+  enregistré avec chaque point. **Niveau par défaut : 3** (celui que l'utilisateur utilise le plus),
+  réglable dans les paramètres.
 
 ## Calcul vitesse et distance
 
@@ -94,7 +97,25 @@ venant des courants de Foucault et du volant d'inertie.
 - Distance = tours × circonférence. Vitesse = Δtours × circonférence / Δtemps.
 - Si aucun nouveau tour n'arrive pendant 3 s, la vitesse tombe à 0.
 - La distance totale est calculée sur les tours bruts, jamais sur une vitesse lissée.
-- Si le capteur envoie aussi la cadence (capteur combiné), l'afficher, sinon masquer ce champ.
+- Le capteur de l'utilisateur ne donne **que la vitesse** : pas de cadence en v1. Si un capteur
+  envoie quand même la cadence, l'afficher, sinon masquer ce champ.
+
+## Envoi vers Strava
+
+Fonctionnement direct via l'API officielle de Strava, sans aucun serveur intermédiaire :
+
+- L'utilisateur crée une fois sa propre « application API » gratuite sur strava.com/settings/api
+  (domaine de rappel : celui de GitHub Pages) et saisit son Client ID et son Client Secret dans les
+  paramètres de l'app. Ces identifiants restent sur l'iPhone et ne sont jamais publiés dans le code.
+- Connexion OAuth (scope `activity:write`), puis stockage local des jetons et rafraîchissement
+  automatique du jeton d'accès.
+- Envoi : génération d'un fichier TCX (temps, distance cumulée, vitesse, FC, puissance estimée en
+  extension `Watts`), puis `POST /api/v3/uploads` avec `data_type=tcx`, `trainer=1` et
+  `sport_type=VirtualRide` ou `Ride` (choix du builder). On interroge ensuite l'état de l'envoi
+  jusqu'à obtenir l'ID de l'activité, et on affiche un lien vers l'activité Strava.
+- La distance du fichier est celle calculée par l'app : Strava ne la recalcule pas pour un fichier home trainer.
+- La séance est marquée « envoyée » dans l'historique pour éviter les doublons. Strava refuse aussi les doublons.
+- Secours : bouton « Exporter .tcx » (partage iOS) pour un import manuel sur strava.com.
 
 ## Écrans
 
@@ -105,8 +126,8 @@ venant des courants de Foucault et du volant d'inertie.
    vitesse est à 0 (option).
 4. **Historique** : liste, puis détail avec graphiques.
 5. **Progression** : semaine et mois, records.
-6. **Paramètres** : circonférence de roue, FC max (pour les zones), facteur de calibration,
-   export et import.
+6. **Paramètres** : circonférence de roue, FC max (pour les zones), niveau par défaut,
+   facteur de calibration, connexion Strava, export et import.
 
 ## Pile technique (choix du builder)
 
@@ -122,6 +143,9 @@ venant des courants de Foucault et du volant d'inertie.
 - Valeurs précises des coefficients par défaut, à documenter.
 - Mode simulation (faux capteurs) pour développer et tester sans matériel.
 
-## Questions ouvertes pour l'utilisateur
+## Décisions de l'utilisateur
 
-Voir le message qui accompagne ce document.
+- Approche A (web app dans Bluefy), pas de Mac.
+- Niveau habituel : 3. Changement manuel du niveau dans l'app : accepté.
+- Capteur de vitesse seul (pas de cadence).
+- Envoi vers Strava souhaité.
