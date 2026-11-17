@@ -130,6 +130,7 @@ class SimulatedSensors extends BaseSensors {
   private revs = 0;
   private time = 0;
   private frac = 0;
+  private clock = 0;
 
   async connect(kind: SensorKind): Promise<void> {
     this.set(kind, 'connexion');
@@ -140,11 +141,14 @@ class SimulatedSensors extends BaseSensors {
     if (kind === 'speed') {
       this.timers.speed = setInterval(() => {
         const kmh = 30 + 3 * Math.sin((Date.now() - start) / 20000) + (Math.random() - 0.5);
-        this.frac += (kmh / 3.6) / 2.105; // tours par seconde
+        const rps = kmh / 3.6 / 2.105;
+        this.clock += 1;
+        this.frac += rps;
         const whole = Math.floor(this.frac);
         this.frac -= whole;
         this.revs = (this.revs + whole) >>> 0;
-        this.time = (this.time + 1024) % 65536;
+        // horodatage du dernier tour complet, comme un vrai capteur
+        this.time = Math.round((this.clock - this.frac / rps) * 1024) % 65536;
         this.csc.emit({ wheelRevs: this.revs, wheelTime: this.time });
       }, 1000);
     } else {

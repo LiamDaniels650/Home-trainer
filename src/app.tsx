@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'preact/hooks';
 import { Connect } from './ui/Connect';
+import { History } from './ui/History';
 import { Home } from './ui/Home';
+import { Progress } from './ui/Progress';
+import { SessionDetail } from './ui/SessionDetail';
 import { Ride } from './ui/Ride';
 
 export function navigate(path: string): void {
@@ -32,6 +35,9 @@ function Screen({ path }: { path: string }) {
   if (path === '/connexion') return <Connect />;
   if (path === '/seance') return <Ride />;
   if (path === '/') return <Home />;
+  if (path === '/historique') return <History />;
+  if (path.startsWith('/historique/')) return <SessionDetail id={decodeURIComponent(path.slice(12))} />;
+  if (path === '/progression') return <Progress />;
   return <div><h1>Page introuvable</h1><a href="#/">Accueil</a></div>;
 }
 
