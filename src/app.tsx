@@ -1,4 +1,7 @@
 import { useEffect, useState } from 'preact/hooks';
+import { Connect } from './ui/Connect';
+import { Home } from './ui/Home';
+import { Ride } from './ui/Ride';
 
 export function navigate(path: string): void {
   location.hash = '#' + path;
@@ -26,7 +29,10 @@ const TABS: [string, string][] = [
 ];
 
 function Screen({ path }: { path: string }) {
-  return <div class="screen"><h1>{path}</h1></div>;
+  if (path === '/connexion') return <Connect />;
+  if (path === '/seance') return <Ride />;
+  if (path === '/') return <Home />;
+  return <div><h1>Page introuvable</h1><a href="#/">Accueil</a></div>;
 }
 
 export function App() {
