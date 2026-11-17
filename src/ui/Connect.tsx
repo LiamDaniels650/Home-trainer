@@ -17,7 +17,8 @@ function SensorCard({ kind, title, hint }: { kind: SensorKind; title: string; hi
       <div class="row">
         <div>
           <div><b>{title}</b></div>
-          <div class="small muted"><span class={'dot ' + state} />{LABELS[state]}{s.deviceName(kind) ? ' · ' + s.deviceName(kind) : ''}</div>
+          <div class="small muted"><span class={'dot ' + state} />{LABELS[state]}{s.deviceName(kind) ? ' · ' + s.deviceName(kind) : ''}
+            {s.dropouts(kind) > 0 && ` · ${s.dropouts(kind)} coupure${s.dropouts(kind) > 1 ? 's' : ''} (reconnecté auto.)`}</div>
         </div>
         {state === 'deconnecte' ? (
           <button onClick={async () => {

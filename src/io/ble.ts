@@ -1,5 +1,6 @@
 import { parseCsc } from '../core/csc';
 import { parseHr } from '../core/hr';
+import { SensorLink, type LinkDevice, type LinkOptions } from './link';
 
 // Typage minimal de Web Bluetooth (absent de lib.dom).
 interface BtChar extends EventTarget { value?: DataView; startNotifications(): Promise<BtChar> }
@@ -17,6 +18,8 @@ export interface Sensors {
   disconnect(kind: SensorKind): void;
   state(kind: SensorKind): SensorState;
   deviceName(kind: SensorKind): string | undefined;
+  /** nombre de coupures depuis la connexion */
+  dropouts(kind: SensorKind): number;
   onCsc(cb: (r: WheelData) => void): () => void;
   onHr(cb: (bpm: number) => void): () => void;
   onState(cb: (kind: SensorKind, state: SensorState) => void): () => void;
@@ -53,74 +56,79 @@ abstract class BaseSensors implements Sensors {
   protected st = new Emitter<[SensorKind, SensorState]>();
   abstract connect(kind: SensorKind): Promise<void>;
   abstract disconnect(kind: SensorKind): void;
+  dropouts(_k: SensorKind): number { return 0; }
   state(k: SensorKind) { return this.states[k]; }
   deviceName(k: SensorKind) { return this.names[k]; }
   onCsc(cb: (r: WheelData) => void) { return this.csc.on(cb); }
   onHr(cb: (bpm: number) => void) { return this.hr.on(cb); }
   onState(cb: (k: SensorKind, s: SensorState) => void) { return this.st.on(cb); }
-  protected set(k: SensorKind, s: SensorState) { this.states[k] = s; this.st.emit(k, s); }
+  protected set(k: SensorKind, s: SensorState) { if (this.states[k] === s) return; this.states[k] = s; this.st.emit(k, s); }
 }
 
+/** Adapte un appareil Web Bluetooth à SensorLink (une seule écoute par appareil). */
+class WebDevice implements LinkDevice {
+  private sink: (dv: DataView) => void = () => {};
+  private readonly handler = (e: Event) => {
+    const v = (e.target as BtChar).value;
+    if (v) this.sink(v);
+  };
+  constructor(private device: BtDevice, private kind: SensorKind) {}
+  async open(onData: (dv: DataView) => void) {
+    this.sink = onData;
+    const server = await this.device.gatt!.connect();
+    const service = await server.getPrimaryService(UUIDS[this.kind].service);
+    const ch = await service.getCharacteristic(UUIDS[this.kind].char);
+    ch.removeEventListener('characteristicvaluechanged', this.handler);
+    ch.addEventListener('characteristicvaluechanged', this.handler);
+    await ch.startNotifications();
+  }
+  close() {
+    try { if (this.device.gatt?.connected) this.device.gatt.disconnect(); } catch { /* déjà coupé */ }
+  }
+  onDisconnected(cb: () => void) {
+    this.device.addEventListener('gattserverdisconnected', cb);
+  }
+}
+
+// La ceinture envoie ~1 message/s en continu : 8 s de silence = liaison morte.
+// Le capteur de vitesse peut se taire quand la roue est arrêtée : pas de chien de garde.
+const LINK_OPTS: Record<SensorKind, LinkOptions> = {
+  hr: { timeoutMs: 10000, watchdogMs: 8000, delaysMs: [2000, 4000, 8000, 10000] },
+  speed: { timeoutMs: 10000, watchdogMs: Number.POSITIVE_INFINITY, delaysMs: [2000, 4000, 8000, 10000] },
+};
+
 class WebBluetoothSensors extends BaseSensors {
-  private devices: Partial<Record<SensorKind, BtDevice>> = {};
-  private wanted: Record<SensorKind, boolean> = { speed: false, hr: false };
-  private timers: Partial<Record<SensorKind, ReturnType<typeof setTimeout>>> = {};
+  private links: Partial<Record<SensorKind, SensorLink>> = {};
 
   async connect(kind: SensorKind): Promise<void> {
     const b = bt();
     if (!b) throw new Error("Le Bluetooth n'est pas disponible dans ce navigateur. Ouvre l'app dans Bluefy.");
     // requestDevice doit être appelé directement depuis un appui de l'utilisateur.
     const device = await b.requestDevice({ filters: [{ services: [UUIDS[kind].service] }] });
-    this.devices[kind] = device;
+    this.links[kind]?.stop();
     this.names[kind] = device.name;
-    this.wanted[kind] = true;
-    device.addEventListener('gattserverdisconnected', () => this.onDrop(kind));
-    this.set(kind, 'connexion');
-    try {
-      await this.attach(kind);
-    } catch (e) {
-      this.wanted[kind] = false;
-      this.set(kind, 'deconnecte');
-      throw e;
-    }
+    const link = new SensorLink(new WebDevice(device, kind), LINK_OPTS[kind], {
+      onData: (dv) => {
+        if (kind === 'hr') this.hr.emit(parseHr(dv));
+        else {
+          const r = parseCsc(dv);
+          if (r.wheelRevs != null && r.wheelTime != null) this.csc.emit({ wheelRevs: r.wheelRevs, wheelTime: r.wheelTime });
+        }
+      },
+      onState: (st) => this.set(kind, st),
+    });
+    this.links[kind] = link;
+    await link.start();
   }
 
   disconnect(kind: SensorKind): void {
-    this.wanted[kind] = false;
-    clearTimeout(this.timers[kind]);
-    this.devices[kind]?.gatt?.disconnect();
+    this.links[kind]?.stop();
+    delete this.links[kind];
     this.set(kind, 'deconnecte');
   }
 
-  private async attach(kind: SensorKind) {
-    const dev = this.devices[kind]!;
-    const server = await dev.gatt!.connect();
-    const service = await server.getPrimaryService(UUIDS[kind].service);
-    const ch = await service.getCharacteristic(UUIDS[kind].char);
-    ch.addEventListener('characteristicvaluechanged', () => {
-      if (!ch.value) return;
-      if (kind === 'hr') this.hr.emit(parseHr(ch.value));
-      else {
-        const r = parseCsc(ch.value);
-        if (r.wheelRevs != null && r.wheelTime != null) this.csc.emit({ wheelRevs: r.wheelRevs, wheelTime: r.wheelTime });
-      }
-    });
-    await ch.startNotifications();
-    this.set(kind, 'connecte');
-  }
-
-  private onDrop(kind: SensorKind) {
-    if (!this.wanted[kind]) return;
-    this.set(kind, 'reconnexion');
-    const retry = async () => {
-      if (!this.wanted[kind]) return;
-      try {
-        await this.attach(kind);
-      } catch {
-        this.timers[kind] = setTimeout(retry, 2000);
-      }
-    };
-    this.timers[kind] = setTimeout(retry, 500);
+  dropouts(kind: SensorKind): number {
+    return this.links[kind]?.dropouts ?? 0;
   }
 }
 
