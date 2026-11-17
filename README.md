@@ -9,14 +9,14 @@ avec un **capteur de vitesse Bluetooth** et une **ceinture cardio Bluetooth**, s
 - Envoi direct vers **Strava**, ou export `.tcx`
 - Données stockées **uniquement sur ton iPhone** (pas de compte, pas de serveur)
 
-## 1. Mettre l'app en ligne (une seule fois)
+## 1. Mise en ligne
 
 L'app est un site statique hébergé gratuitement sur GitHub Pages. Seul le code y est publié, jamais tes données.
 
-1. Fusionne cette branche dans `main`.
-2. Sur GitHub : **Settings → Pages → Build and deployment → Source : GitHub Actions**.
-3. Le workflow « Déploiement GitHub Pages » publie l'app à l'adresse
-   **https://liamdaniels650.github.io/Home-trainer/**.
+- GitHub Pages est réglé sur **Settings → Pages → Source : Deploy from a branch → `gh-pages` / `(root)`**.
+- Pour publier une nouvelle version : `npm run deploy`. Le script lance les tests, construit l'app et l'envoie sur `gh-pages`.
+- Adresse : **https://liamdaniels650.github.io/Home-trainer/**
+- À chaque envoi sur `main`, le workflow « Tests » vérifie que les tests passent et que l'app se construit.
 
 ## 2. Installer sur l'iPhone
 
