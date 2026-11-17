@@ -4,8 +4,8 @@
  * P = m(niveau) × (5·v + 0.306·v²), v en km/h, avec m(n) = 0.3 + 0.1·(n−1).
  * Calage : niveau 8 à 40 km/h ≈ 690 W (valeur max annoncée). Le facteur `calib` permet d'ajuster.
  */
-const A = 5;
-const C = 0.306;
+export const A = 5;
+export const C = 0.306;
 
 export function levelMultiplier(level: number): number {
   const n = Math.min(8, Math.max(1, Math.round(level)));

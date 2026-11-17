@@ -1,5 +1,6 @@
 import { bestAverage, estimatePower } from './power';
-import { BEST_KEYS, type Draft, type Sample, type Session, type Summary } from './types';
+import { BEST_KEYS, type Draft, type Sample, type Session, type Summary, type Workout } from './types';
+import { stepAt, stepResults } from './workout';
 import { hrZone } from './zones';
 
 export interface RecorderOptions {
@@ -9,6 +10,8 @@ export interface RecorderOptions {
   hrMax: number;
   autoPause: boolean;
   id?: string;
+  workout?: Workout;
+  ftp?: number;
 }
 
 export interface TickInput {
@@ -47,6 +50,8 @@ export class Recorder {
   get currentLevel(): number { return this.level; }
   get distanceM(): number { return this.dist; }
   get elapsedS(): number { return this._samples.length; }
+  get workout(): Workout | undefined { return this.opts.workout; }
+  get ftp(): number { return this.opts.ftp ?? 200; }
 
   setLevel(n: number): void { this.level = Math.min(8, Math.max(1, Math.round(n))); }
   pause(): void { this.manualPause = true; }
@@ -67,6 +72,10 @@ export class Recorder {
       power: estimatePower(input.speed, this.level, this.opts.calib),
       level: this.level,
     };
+    if (this.opts.workout) {
+      const pos = stepAt(this.opts.workout.steps, this._samples.length);
+      if (pos) s.step = pos.index;
+    }
     this._samples.push(s);
     return s;
   }
@@ -75,11 +84,12 @@ export class Recorder {
     return {
       id: this.id, startedAt: this.startedAt, level: this.level, calib: this.opts.calib,
       hrMax: this.opts.hrMax, autoPause: this.opts.autoPause, paused: this.manualPause, samples: this._samples,
+      ...(this.opts.workout ? { workout: this.opts.workout, ftp: this.ftp } : {}),
     };
   }
 
   static restore(d: Draft): Recorder {
-    const r = new Recorder({ id: d.id, startedAt: new Date(d.startedAt), level: d.level, calib: d.calib, hrMax: d.hrMax, autoPause: d.autoPause });
+    const r = new Recorder({ id: d.id, startedAt: new Date(d.startedAt), level: d.level, calib: d.calib, hrMax: d.hrMax, autoPause: d.autoPause, workout: d.workout, ftp: d.ftp });
     r._samples = [...d.samples];
     r.dist = d.samples.length ? d.samples[d.samples.length - 1].distM : 0;
     r.manualPause = d.paused;
@@ -87,7 +97,10 @@ export class Recorder {
   }
 
   finish(): Session {
-    return { id: this.id, startedAt: this.startedAt, samples: this._samples, summary: summarize(this._samples, this.opts.hrMax) };
+    const s: Session = { id: this.id, startedAt: this.startedAt, samples: this._samples, summary: summarize(this._samples, this.opts.hrMax) };
+    const w = this.opts.workout;
+    if (w) s.workout = { name: w.name, ftp: this.ftp, steps: w.steps, results: stepResults(this._samples, w.steps) };
+    return s;
   }
 }
 

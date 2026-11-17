@@ -13,6 +13,8 @@ export interface Sample {
   hr: number | null;
   power: number;
   level: number;
+  /** index de l'étape de la séance guidée */
+  step?: number;
 }
 
 export type BestKey = '5' | '60' | '300' | '1200';
@@ -38,6 +40,14 @@ export interface Session {
   samples: Sample[];
   summary: Summary;
   stravaId?: number;
+  workout?: SessionWorkout;
+}
+
+export interface SessionWorkout {
+  name: string;
+  ftp: number;
+  steps: WorkoutStep[];
+  results: StepResult[];
 }
 
 export interface Draft {
@@ -49,10 +59,34 @@ export interface Draft {
   autoPause: boolean;
   paused: boolean;
   samples: Sample[];
+  workout?: Workout;
+  ftp?: number;
 }
 
 export interface Totals {
   count: number;
   durationS: number;
   distanceM: number;
+}
+
+export type StepKind = 'warmup' | 'work' | 'rest' | 'cooldown';
+
+export interface WorkoutStep {
+  durationS: number;
+  kind: StepKind;
+  /** cible en % de la FTP */
+  pct: number;
+}
+
+export interface Workout {
+  id: string;
+  name: string;
+  steps: WorkoutStep[];
+  builtin?: boolean;
+}
+
+export interface StepResult {
+  durationS: number;
+  avgPower: number | null;
+  avgHr: number | null;
 }

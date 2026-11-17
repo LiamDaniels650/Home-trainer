@@ -128,3 +128,44 @@ describe('corrections relecture', () => {
     expect(r.samples[0].hr).toBeNull();
   });
 });
+
+describe('séance guidée', () => {
+  const workout = { id: 'w', name: 'Test', steps: [
+    { durationS: 2, kind: 'warmup' as const, pct: 50 },
+    { durationS: 3, kind: 'work' as const, pct: 100 },
+  ] };
+  test("chaque échantillon porte l'étape ; au-delà, roue libre sans étape", () => {
+    const r = new Recorder({ ...opts, workout, ftp: 250 });
+    ride(r, 7);
+    expect(r.samples.map((s) => s.step)).toEqual([0, 0, 1, 1, 1, undefined, undefined]);
+  });
+  test('la pause ne fait pas avancer les étapes', () => {
+    const r = new Recorder({ ...opts, workout, ftp: 250 });
+    ride(r, 1);
+    r.pause();
+    ride(r, 5, 1);
+    r.resume();
+    ride(r, 1, 6);
+    expect(r.samples.map((s) => s.step)).toEqual([0, 0]);
+  });
+  test('brouillon et séance finale gardent la séance guidée et les résultats', () => {
+    const r = new Recorder({ ...opts, workout, ftp: 250 });
+    ride(r, 3);
+    const back = Recorder.restore(JSON.parse(JSON.stringify(r.toDraft())));
+    expect(back.workout?.name).toBe('Test');
+    ride(back, 1, 3);
+    expect(back.samples[3].step).toBe(1);
+    const s = back.finish();
+    expect(s.workout).toMatchObject({ name: 'Test', ftp: 250, steps: workout.steps });
+    expect(s.workout!.results).toEqual([
+      { durationS: 2, avgPower: 213, avgHr: 140 },
+      { durationS: 2, avgPower: 213, avgHr: 140 },
+    ]);
+  });
+  test('sans séance guidée : pas de champ workout', () => {
+    const r = new Recorder(opts);
+    ride(r, 1);
+    expect(r.finish().workout).toBeUndefined();
+    expect(r.samples[0].step).toBeUndefined();
+  });
+});
