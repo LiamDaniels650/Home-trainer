@@ -1,6 +1,8 @@
 import { WheelTracker } from '../core/csc';
 import { Recorder } from '../core/recorder';
-import type { Draft, Sample, Session } from '../core/types';
+import type { Draft, Sample, Session, Workout } from '../core/types';
+import { stepAt, type StepPosition } from '../core/workout';
+import { beep } from '../io/audio';
 import { getSensors, type SensorKind, type SensorState } from '../io/ble';
 import * as db from '../io/db';
 import { releaseAwake } from '../io/wakelock';
@@ -19,6 +21,11 @@ export interface RideView {
   autoPaused: boolean;
   speedState: SensorState;
   hrState: SensorState;
+  /** étape en cours de la séance guidée (null : séance libre ou guidage terminé) */
+  step: StepPosition | null;
+  workoutDone: boolean;
+  ftp: number;
+  calib: number;
 }
 
 /** Orchestration d'une séance : capteurs → tracker → enregistreur, 1 tick/s, brouillon toutes les 5 s. */
@@ -31,7 +38,7 @@ export class RideController {
   private listeners = new Set<() => void>();
   private last: Sample | null = null;
 
-  constructor(readonly recorder: Recorder, circumferenceMm: number) {
+  constructor(readonly recorder: Recorder, circumferenceMm: number, private calib = 1) {
     this.tracker = new WheelTracker(circumferenceMm);
     const s = getSensors();
     this.offs.push(
@@ -57,11 +64,23 @@ export class RideController {
     const sample = this.recorder.tick({ distM: this.tracker.distanceM(), speed: this.tracker.speedKmh(now), hr, sensorLost });
     if (sample) {
       this.last = sample;
+      this.cue();
       if (sample.t % DRAFT_EVERY_S === 0) void db.saveDraft(this.recorder.toDraft());
     } else {
       this.last = this.last && { ...this.last, speed: this.tracker.speedKmh(now), hr, power: 0 };
     }
     this.emit();
+  }
+
+  /** Bips : 3, 2, 1 avant chaque changement d'étape, puis un bip long au changement. */
+  private cue() {
+    const w = this.recorder.workout;
+    if (!w) return;
+    const pos = stepAt(w.steps, this.recorder.elapsedS);
+    const prev = stepAt(w.steps, this.recorder.elapsedS - 1);
+    if (pos && prev && pos.index !== prev.index) beep(1320, 0.45);
+    else if (!pos && prev) beep(1320, 0.8);
+    else if (pos && pos.remainingS <= 3) beep(880, 0.12);
   }
 
   view(): RideView {
@@ -78,6 +97,10 @@ export class RideController {
       autoPaused: this.recorder.autoPaused,
       speedState: s.state('speed'),
       hrState: s.state('hr'),
+      step: this.recorder.workout ? stepAt(this.recorder.workout.steps, this.recorder.elapsedS) : null,
+      workoutDone: !!this.recorder.workout && !stepAt(this.recorder.workout.steps, this.recorder.elapsedS),
+      ftp: this.recorder.ftp,
+      calib: this.calib,
     };
   }
 
@@ -102,13 +125,21 @@ let active: RideController | null = null;
 
 export const activeRide = () => active;
 
+let pending: Workout | null = null;
+
+/** Séance guidée choisie, utilisée au prochain « Commencer ». */
+export function setPendingWorkout(w: Workout | null): void { pending = w; }
+export function pendingWorkout(): Workout | null { return pending; }
+
 export async function startRide(draft: Draft | null): Promise<RideController> {
   active?.stop();
   const st = await db.getSettings();
+  const workout = draft ? undefined : pending ?? undefined;
+  pending = null;
   const rec = draft
     ? Recorder.restore(draft)
-    : new Recorder({ startedAt: new Date(), level: st.defaultLevel, calib: st.calib, hrMax: st.hrMax, autoPause: st.autoPause });
-  active = new RideController(rec, st.circumferenceMm);
+    : new Recorder({ startedAt: new Date(), level: st.defaultLevel, calib: st.calib, hrMax: st.hrMax, autoPause: st.autoPause, workout, ftp: st.ftp });
+  active = new RideController(rec, st.circumferenceMm, draft?.calib ?? st.calib);
   await db.saveDraft(rec.toDraft());
   return active;
 }

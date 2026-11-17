@@ -6,6 +6,36 @@ import { fmtDuration, fmtKm, fmtNum } from './format';
 import { useAsync } from './hooks';
 import { activeRide, finishRide } from './ride';
 import { ConfirmButton } from './ConfirmButton';
+import { KIND_LABELS, powerStatus, speedForPower, targetWatts } from '../core/workout';
+import { WorkoutProfile } from './WorkoutProfile';
+import type { RideView } from './ride';
+
+function WorkoutPanel({ v, steps, name }: { v: RideView; steps: import('../core/types').WorkoutStep[]; name: string }) {
+  if (v.workoutDone) {
+    return <div class="card wk"><b>{name} terminée ✓</b><div class="small muted">L'enregistrement continue en roue libre. Touche « Terminer » quand tu veux.</div></div>;
+  }
+  const pos = v.step;
+  if (!pos) return null;
+  const target = targetWatts(pos.step.pct, v.ftp);
+  const speed = speedForPower(target, v.level, v.calib);
+  const status = v.power > 0 ? powerStatus(v.power, target) : 'low';
+  const hint = status === 'ok' ? 'Dans la cible' : status === 'low' ? 'Accélère' : 'Ralentis';
+  return (
+    <div class="card wk">
+      <div class="wk-top">
+        <span class="wk-name">{KIND_LABELS[pos.step.kind]} <span class="muted small">{pos.index + 1}/{steps.length}</span></span>
+        <span class="wk-count">{fmtDuration(pos.remainingS)}</span>
+      </div>
+      <div class="wk-target">
+        <span>Cible <b>{target} W</b> <span class="muted small">{pos.step.pct}% FTP</span></span>
+        <span>Vise <b>{fmtNum(speed)}</b> km/h</span>
+      </div>
+      <div class={'small st-' + status} style="margin-top:4px;font-weight:600">{hint} ({v.power} W)</div>
+      <div style="margin-top:8px"><WorkoutProfile steps={steps} current={pos.index} height={30} /></div>
+      {pos.next && <div class="small muted" style="margin-top:6px">Ensuite : {KIND_LABELS[pos.next.kind]} {fmtDuration(pos.next.durationS)} à {targetWatts(pos.next.pct, v.ftp)} W</div>}
+    </div>
+  );
+}
 
 export function Ride() {
   const ride = activeRide();
@@ -26,6 +56,7 @@ export function Ride() {
       {(v.speedState === 'reconnexion' || v.hrState === 'reconnexion') && (
         <div class="banner small">Reconnexion {v.speedState === 'reconnexion' ? 'du capteur de vitesse' : 'de la ceinture'}… l'enregistrement continue.</div>
       )}
+      {ride.recorder.workout && <WorkoutPanel v={v} steps={ride.recorder.workout.steps} name={ride.recorder.workout.name} />}
       <div class="ride-time">{fmtDuration(v.elapsedS)}{status && <span class="ride-status">{status}</span>}</div>
       <div class="ride-big">
         <div class="v">{fmtNum(v.speed)}</div><div class="l">km/h</div>

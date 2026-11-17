@@ -43,3 +43,13 @@ label { display: block; margin: 12px 0 6px; color: var(--muted); font-size: 14px
 .stat.big .v { font-size: 38px; }
 .stat.level .row { justify-content: space-between; margin-top: 4px; }
 .stat.level button { width: 52px; height: 52px; padding: 0; font-size: 28px; border-radius: 50%; }
+button.mini { padding: 8px 12px; font-size: 14px; border-radius: 9px; }
+.step-edit label { font-size: 12px; }
+.wk { padding: 12px 14px; }
+.wk-top { display: flex; justify-content: space-between; align-items: baseline; }
+.wk-name { font-weight: 700; font-size: 18px; }
+.wk-count { font-size: 30px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.wk-target { display: flex; justify-content: space-between; margin-top: 6px; font-size: 15px; }
+.wk-target b { font-size: 22px; }
+.st-ok { color: var(--ok); } .st-low { color: var(--warn); } .st-high { color: var(--bad); }
+.tabs a { font-size: 12.5px; }

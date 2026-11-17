@@ -7,6 +7,8 @@ import { fmtDate, fmtDuration, fmtKm, fmtNum } from './format';
 import { useAsync } from './hooks';
 import type { ComponentChildren } from 'preact';
 import { ConfirmButton } from './ConfirmButton';
+import { KIND_LABELS, targetWatts } from '../core/workout';
+import { pctColor } from './WorkoutProfile';
 
 const BEST_LABELS = { '5': '5 s', '60': '1 min', '300': '5 min', '1200': '20 min' } as const;
 
@@ -39,6 +41,28 @@ export function SessionDetail({ id, actions }: { id: string; actions?: (s: impor
       </div>
 
       {actions?.(session, reload)}
+
+      {session.workout && (
+        <div class="card">
+          <div class="small muted" style="margin-bottom:8px">Séance guidée : <b style="color:var(--text)">{session.workout.name}</b> · FTP {session.workout.ftp} W</div>
+          <div class="row small muted" style="padding:4px 0"><span style="flex:1">Étape</span><span style="width:52px;text-align:right">Durée</span><span style="width:58px;text-align:right">Cible</span><span style="width:58px;text-align:right">Réalisé</span><span style="width:40px;text-align:right">FC</span></div>
+          {session.workout.steps.map((st, i) => {
+            const r = session.workout!.results[i];
+            const target = targetWatts(st.pct, session.workout!.ftp);
+            const ratio = r?.avgPower != null ? r.avgPower / target : null;
+            const cls = ratio == null ? 'muted' : ratio < 0.95 ? 'st-low' : ratio > 1.05 ? 'st-high' : 'st-ok';
+            return (
+              <div class="row small" style={`padding:5px 0;border-top:1px solid var(--line);opacity:${r?.durationS ? 1 : 0.4}`}>
+                <span style="flex:1"><span class="dot" style={`background:${pctColor(st.pct)}`} />{KIND_LABELS[st.kind]}</span>
+                <span style="width:52px;text-align:right">{fmtDuration(r?.durationS ?? 0)}</span>
+                <span style="width:58px;text-align:right">{target} W</span>
+                <span class={cls} style="width:58px;text-align:right;font-weight:600">{r?.avgPower ?? '–'}{r?.avgPower != null && ' W'}</span>
+                <span style="width:40px;text-align:right">{r?.avgHr ?? '–'}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       <Chart title="Vitesse" unit="km/h" x={series.x} y={series.speed} color="#3c9cff" />
       {m.avgHr != null && <Chart title="Fréquence cardiaque" unit="bpm" x={series.x} y={series.hr} color="#ff4d5e" />}

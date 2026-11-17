@@ -4,7 +4,8 @@ import { getSensors, type SensorKind } from '../io/ble';
 import * as db from '../io/db';
 import { keepAwake } from '../io/wakelock';
 import { useAsync } from './hooks';
-import { activeRide, startRide } from './ride';
+import { activeRide, pendingWorkout, setPendingWorkout, startRide } from './ride';
+import { unlockAudio } from '../io/audio';
 
 const LABELS: Record<string, string> = { deconnecte: 'Non connecté', connexion: 'Connexion…', connecte: 'Connecté', reconnexion: 'Reconnexion…' };
 
@@ -48,9 +49,14 @@ export function Connect() {
   return (
     <div>
       <h1>Capteurs</h1>
+      {pendingWorkout() && !activeRide() && !resuming && (
+        <div class="card row"><span>Séance guidée : <b>{pendingWorkout()!.name}</b></span>
+          <button class="mini" onClick={() => { setPendingWorkout(null); force((n) => n + 1); }}>Retirer</button></div>
+      )}
       <SensorCard kind="speed" title="Capteur de vitesse" hint="Fais tourner la roue arrière pour réveiller le capteur." />
       <SensorCard kind="hr" title="Ceinture cardio" hint="Facultatif. Humidifie les électrodes pour un signal stable." />
-      <button class="primary block" disabled={!speedOk} onClick={async () => {
+      <button class="primary block" disabled={!speedOk || draft === undefined} onClick={async () => {
+        unlockAudio();
         await keepAwake();
         if (!activeRide()) await startRide(resuming ? draft! : null);
         navigate('/seance');

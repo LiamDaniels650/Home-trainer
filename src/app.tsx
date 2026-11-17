@@ -5,6 +5,8 @@ import { Home } from './ui/Home';
 import { Progress } from './ui/Progress';
 import { SessionDetail } from './ui/SessionDetail';
 import { SettingsScreen } from './ui/Settings';
+import { WorkoutDetail, WorkoutList } from './ui/Workouts';
+import { WorkoutEditor } from './ui/WorkoutEditor';
 import { StravaActions } from './ui/StravaActions';
 import * as db from './io/db';
 import { handleOAuthRedirect } from './io/strava';
@@ -30,6 +32,7 @@ export function useRoute(): string {
 
 const TABS: [string, string][] = [
   ['/', 'Accueil'],
+  ['/seances', 'Séances'],
   ['/historique', 'Historique'],
   ['/progression', 'Progression'],
   ['/parametres', 'Réglages'],
@@ -42,6 +45,13 @@ function Screen({ path, notice }: { path: string; notice: string }) {
   if (path === '/historique') return <History />;
   if (path.startsWith('/historique/')) return <SessionDetail id={decodeURIComponent(path.slice(12))} actions={(s, reload) => <StravaActions session={s} reload={reload} />} />;
   if (path === '/progression') return <Progress />;
+  if (path === '/seances') return <WorkoutList />;
+  if (path.startsWith('/seances/nouvelle')) {
+    const from = new URLSearchParams(path.split('?')[1] ?? '').get('from') ?? undefined;
+    return <WorkoutEditor key={path} fromId={from} />;
+  }
+  if (path.startsWith('/seances/modifier/')) return <WorkoutEditor key={path} editId={decodeURIComponent(path.slice(18))} />;
+  if (path.startsWith('/seances/')) return <WorkoutDetail id={decodeURIComponent(path.slice(9))} />;
   if (path === '/parametres') return <SettingsScreen notice={notice} />;
   return <div><h1>Page introuvable</h1><a href="#/">Accueil</a></div>;
 }

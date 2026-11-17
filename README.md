@@ -5,6 +5,7 @@ avec un **capteur de vitesse Bluetooth** et une **ceinture cardio Bluetooth**, s
 
 - Distance et vitesse calculées à partir des tours de roue réels et de ta circonférence de roue
 - Puissance **estimée** (vitesse + niveau de résistance 1 à 8), cohérente d'une séance à l'autre
+- **Séances guidées** (fractionné) : cible en watts et **vitesse à tenir** à ton niveau de résistance, compte à rebours, bips
 - Historique, graphiques, zones cardio, progression, records
 - Envoi direct vers **Strava**, ou export `.tcx`
 - Données stockées **uniquement sur ton iPhone** (pas de compte, pas de serveur)
@@ -41,7 +42,18 @@ L'app est un site statique hébergé gratuitement sur GitHub Pages. Seul le code
 3. Si tu bouges la manette de résistance, change aussi le niveau avec **− / +** dans l'app.
 4. **Terminer** : la séance est enregistrée. Si Bluefy se ferme en pleine séance, l'accueil propose de la reprendre.
 
-## 5. Connecter Strava (une seule fois)
+## 5. Séances guidées
+
+1. Dans **Réglages → Séances guidées**, renseigne ta **FTP**. L'app propose 95 % de ton record sur 20 minutes.
+2. Onglet **Séances** : choisis une séance prête à l'emploi, ou crée la tienne (étapes, blocs répétés).
+3. **Lancer cette séance** → capteurs → **Commencer**. Pour chaque étape, l'app affiche :
+   - la puissance cible et la vitesse à tenir à ton niveau actuel ;
+   - en couleur, si tu es dans la cible (vert), en dessous (orange) ou au-dessus (rouge).
+
+   Des bips annoncent les changements d'étape (garde le son de l'iPhone activé).
+4. Sur Strava, chaque étape devient un tour.
+
+## 6. Connecter Strava (une seule fois)
 
 1. Sur un navigateur connecté à Strava, va sur **https://www.strava.com/settings/api** et crée une application :
    - Nom : `Home Trainer` · Catégorie : `Training`
@@ -55,6 +67,8 @@ Si l'envoi échoue, utilise **Exporter .tcx** puis importe le fichier sur strava
 
 ## Limites connues
 
+- Si la ceinture cardio cesse d'envoyer des données pendant 8 s, l'app relance la connexion toute seule.
+  L'écran Capteurs affiche le nombre de coupures.
 - À chaque séance, choisis le capteur dans la liste Bluetooth : Bluefy ne permet pas de le reconnecter
   sans un appui. En cours de séance, la reconnexion est automatique.
 - L'envoi direct vers Strava n'a pas pu être testé avant ta première utilisation. S'il échoue, l'export `.tcx`

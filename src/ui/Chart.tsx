@@ -17,7 +17,7 @@ export function Chart({ title, x, y, color, unit }: Props) {
       scales: { x: { time: false } },
       axes: [
         { ...axis, values: (_u, vals) => vals.map((v) => fmtDuration(v)) },
-        { ...axis, size: 40 },
+        { ...axis, size: 50 },
       ],
       series: [{}, { stroke: color, width: 2, fill: color + '22', spanGaps: false, points: { show: false } }],
     }, [x, y as number[]], el.current);
