@@ -134,9 +134,10 @@ test('stop : plus aucune tentative', async () => {
 test('Déconnecter pendant la première connexion : pas de faux « connecté »', async () => {
   dev.mode = 'slow';
   const p = link.start();
+  const check = expect(p).rejects.toThrow(/annul/i);
   link.stop();
   await vi.advanceTimersByTimeAsync(3000);
-  await expect(p).rejects.toThrow(/annul/i);
+  await check;
   expect(states.at(-1)).toBe('deconnecte');
   expect(dev.closes).toBeGreaterThanOrEqual(2); // stop() + fermeture de la connexion arrivée trop tard
   await vi.advanceTimersByTimeAsync(60000);
