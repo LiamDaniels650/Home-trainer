@@ -5,10 +5,12 @@ import * as db from '../io/db';
 import { fmtDuration, fmtKm, fmtNum } from './format';
 import { useAsync } from './hooks';
 import { activeRide, finishRide } from './ride';
+import { ConfirmButton } from './ConfirmButton';
 
 export function Ride() {
   const ride = activeRide();
   const [, force] = useState(0);
+  const [error, setError] = useState('');
   const [settings] = useAsync(() => db.getSettings());
   useEffect(() => {
     if (!ride) { navigate('/'); return; }
@@ -46,12 +48,16 @@ export function Ride() {
       </div>
       <div class="grid2" style="margin-top:8px">
         <button class="block" onClick={() => ride.togglePause()}>{v.paused ? 'Reprendre' : 'Pause'}</button>
-        <button class="danger block" onClick={async () => {
-          if (!confirm('Terminer et enregistrer la séance ?')) return;
-          const s = await finishRide();
-          navigate(s ? '/historique/' + s.id : '/');
-        }}>Terminer</button>
+        <ConfirmButton class="danger block" confirmLabel="Confirmer la fin" onConfirm={async () => {
+          try {
+            const s = await finishRide();
+            navigate(s ? '/historique/' + s.id : '/');
+          } catch (e) {
+            setError("La séance n'a pas pu être enregistrée (" + (e as Error).message + '). Elle continue : réessaie « Terminer ».');
+          }
+        }}>Terminer</ConfirmButton>
       </div>
+      {error && <p class="small" style="color:var(--bad)">{error}</p>}
       <a class="small muted" style="display:block;text-align:center;margin-top:14px" href="#/connexion">Capteurs</a>
     </div>
   );

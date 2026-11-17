@@ -5,8 +5,11 @@ import * as db from '../io/db';
 import { fmtDate, fmtDuration, fmtKm } from './format';
 import { useAsync } from './hooks';
 import { activeRide, finishDraft } from './ride';
+import { ConfirmButton } from './ConfirmButton';
+import { useState } from 'preact/hooks';
 
 export function Home() {
+  const [error, setError] = useState('');
   const [data, reload] = useAsync(async () => ({ draft: await db.getDraft(), sessions: await db.listSessions() }));
   if (!data) return null;
   const { draft, sessions } = data;
@@ -32,13 +35,16 @@ export function Home() {
           <button class="primary block" onClick={() => navigate('/connexion')}>Reprendre</button>
           <div class="grid2">
             <button class="block" onClick={async () => {
-              const s = await finishDraft(draft);
-              if (s) navigate('/historique/' + s.id); else reload();
+              try {
+                const s = await finishDraft(draft);
+                if (s) navigate('/historique/' + s.id); else reload();
+              } catch (e) {
+                setError("Échec de l'enregistrement : " + (e as Error).message);
+              }
             }}>Terminer et enregistrer</button>
-            <button class="block" onClick={async () => {
-              if (confirm('Supprimer cette séance non terminée ?')) { await db.clearDraft(); reload(); }
-            }}>Supprimer</button>
+            <ConfirmButton class="block" confirmLabel="Confirmer" onConfirm={async () => { await db.clearDraft(); reload(); }}>Supprimer</ConfirmButton>
           </div>
+          {error && <p class="small" style="color:var(--bad)">{error}</p>}
         </div>
       ) : (
         <button class="primary block" style="padding:20px;font-size:20px" onClick={() => navigate('/connexion')}>Démarrer une séance</button>

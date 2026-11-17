@@ -10,5 +10,10 @@ export async function keepAwake(): Promise<() => void> {
   } catch {
     /* pas bloquant */
   }
-  return () => noSleep?.disable();
+  return releaseAwake;
+}
+
+/** Laisse l'écran se mettre en veille (fin de séance). */
+export function releaseAwake(): void {
+  noSleep?.disable();
 }

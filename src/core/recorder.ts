@@ -16,6 +16,8 @@ export interface TickInput {
   distM: number;
   speed: number;
   hr: number | null;
+  /** capteur de vitesse en reconnexion : on continue d'enregistrer (pas de pause auto) */
+  sensorLost?: boolean;
 }
 
 function newId(): string {
@@ -54,14 +56,14 @@ export class Recorder {
     // Le capteur peut repartir de 0 (rechargement) : une distance qui recule devient la nouvelle référence.
     const delta = input.distM >= this.lastInputDist ? input.distM - this.lastInputDist : input.distM;
     this.lastInputDist = input.distM;
-    this._autoPaused = this.opts.autoPause && !(input.speed > 0);
+    this._autoPaused = this.opts.autoPause && !input.sensorLost && !(input.speed > 0);
     if (this.manualPause || this._autoPaused) return null;
     this.dist += delta;
     const s: Sample = {
       t: this._samples.length + 1,
       distM: this.dist,
       speed: input.speed,
-      hr: input.hr,
+      hr: input.hr != null && input.hr > 0 ? input.hr : null,
       power: estimatePower(input.speed, this.level, this.opts.calib),
       level: this.level,
     };

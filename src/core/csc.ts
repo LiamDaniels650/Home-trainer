@@ -43,6 +43,15 @@ export class WheelTracker {
       return;
     }
     this.totalRevs += dRevs;
+    if (nowMs - this.lastRevChangeMs > STOP_AFTER_MS) {
+      // Reprise après un arrêt : le temps 16 bits a pu reboucler (toutes les 64 s),
+      // la vitesse de ce paquet n'est pas fiable. On compte la distance et on attend le paquet suivant.
+      this.prevRevs = revs;
+      this.prevTime = time1024;
+      this.lastRevChangeMs = nowMs;
+      this.speed = 0;
+      return;
+    }
     const metersPerSec = (dRevs * this.circumferenceMm) / 1000 / (dTime / 1024);
     this.speed = metersPerSec * 3.6;
     this.prevRevs = revs;

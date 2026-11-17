@@ -3,6 +3,7 @@ import { Recorder } from '../core/recorder';
 import type { Draft, Sample, Session } from '../core/types';
 import { getSensors, type SensorKind, type SensorState } from '../io/ble';
 import * as db from '../io/db';
+import { releaseAwake } from '../io/wakelock';
 
 const HR_STALE_MS = 5000;
 const DRAFT_EVERY_S = 5;
@@ -52,7 +53,8 @@ export class RideController {
   private tick() {
     const now = Date.now();
     const hr = this.hr != null && now - this.hrAt < HR_STALE_MS ? this.hr : null;
-    const sample = this.recorder.tick({ distM: this.tracker.distanceM(), speed: this.tracker.speedKmh(now), hr });
+    const sensorLost = getSensors().state('speed') === 'reconnexion';
+    const sample = this.recorder.tick({ distM: this.tracker.distanceM(), speed: this.tracker.speedKmh(now), hr, sensorLost });
     if (sample) {
       this.last = sample;
       if (sample.t % DRAFT_EVERY_S === 0) void db.saveDraft(this.recorder.toDraft());
@@ -114,19 +116,19 @@ export async function startRide(draft: Draft | null): Promise<RideController> {
 /** Termine et enregistre. Renvoie null si la séance est vide (rien n'est enregistré). */
 export async function finishRide(): Promise<Session | null> {
   if (!active) return null;
-  active.stop();
   const session = active.recorder.finish();
+  // Enregistrer d'abord : en cas d'échec, la séance continue et le brouillon reste.
+  if (session.samples.length) await db.saveSession(session);
+  active.stop();
   active = null;
+  releaseAwake();
   await db.clearDraft();
-  if (!session.samples.length) return null;
-  await db.saveSession(session);
-  return session;
+  return session.samples.length ? session : null;
 }
 
 export async function finishDraft(d: Draft): Promise<Session | null> {
   const session = Recorder.restore(d).finish();
+  if (session.samples.length) await db.saveSession(session);
   await db.clearDraft();
-  if (!session.samples.length) return null;
-  await db.saveSession(session);
-  return session;
+  return session.samples.length ? session : null;
 }

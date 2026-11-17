@@ -6,6 +6,7 @@ import { Chart } from './Chart';
 import { fmtDate, fmtDuration, fmtKm, fmtNum } from './format';
 import { useAsync } from './hooks';
 import type { ComponentChildren } from 'preact';
+import { ConfirmButton } from './ConfirmButton';
 
 const BEST_LABELS = { '5': '5 s', '60': '1 min', '300': '5 min', '1200': '20 min' } as const;
 
@@ -67,11 +68,10 @@ export function SessionDetail({ id, actions }: { id: string; actions?: (s: impor
         </div>
       </div>
 
-      <button class="block" style="background:transparent;color:var(--bad)" onClick={async () => {
-        if (!confirm('Supprimer définitivement cette séance ?')) return;
+      <ConfirmButton class="block" style="background:transparent;color:var(--bad)" confirmLabel="Appuie encore pour supprimer définitivement" onConfirm={async () => {
         await db.deleteSession(session.id);
         navigate('/historique');
-      }}>Supprimer la séance</button>
+      }}>Supprimer la séance</ConfirmButton>
     </div>
   );
 }

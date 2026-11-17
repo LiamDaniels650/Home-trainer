@@ -53,6 +53,13 @@ L'app est un site statique hébergé gratuitement sur GitHub Pages. Seul le code
 
 Si l'envoi échoue, utilise **Exporter .tcx** puis importe le fichier sur strava.com (menu « + » → Importer une activité).
 
+## Limites connues
+
+- À chaque séance, choisis le capteur dans la liste Bluetooth : Bluefy ne permet pas de le reconnecter
+  sans un appui. En cours de séance, la reconnexion est automatique.
+- L'envoi direct vers Strava n'a pas pu être testé avant ta première utilisation. S'il échoue, l'export `.tcx`
+  marche toujours.
+
 ## À propos de la puissance
 
 Elite ne publie pas de courbe officielle pour le Novo Force 8 niveaux. L'app utilise

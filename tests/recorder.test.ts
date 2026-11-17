@@ -111,3 +111,20 @@ describe('zones et résumé', () => {
     expect(s.avgSpeed).toBe(0);
   });
 });
+
+describe('corrections relecture', () => {
+  test('capteur en reconnexion : pas de pause auto, le temps continue', () => {
+    const r = new Recorder({ ...opts, autoPause: true });
+    ride(r, 2);
+    r.tick({ distM: 2 * STEP, speed: 0, hr: 140, sensorLost: true });
+    r.tick({ distM: 2 * STEP, speed: 0, hr: 140, sensorLost: true });
+    expect(r.autoPaused).toBe(false);
+    expect(r.samples).toHaveLength(4);
+    expect(r.samples[3]).toMatchObject({ t: 4, speed: 0, power: 0 });
+  });
+  test('FC à 0 (ceinture sans contact) = pas de donnée', () => {
+    const r = new Recorder(opts);
+    r.tick({ distM: STEP, speed: V, hr: 0 });
+    expect(r.samples[0].hr).toBeNull();
+  });
+});

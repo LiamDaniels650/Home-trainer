@@ -4,6 +4,7 @@ import { shareFile } from '../io/files';
 import { isStravaConnected, stravaAuthUrl } from '../io/strava';
 import { estimatePower } from '../core/power';
 import { useAsync } from './hooks';
+import { ConfirmButton } from './ConfirmButton';
 
 export function redirectUri(): string {
   return location.origin + location.pathname;
@@ -59,7 +60,7 @@ export function SettingsScreen({ notice }: { notice?: string }) {
         {connected ? (
           <>
             <p style="margin-top:0">Connecté{s.strava?.athleteName ? ` en tant que ${s.strava.athleteName}` : ''} ✓</p>
-            <button class="block" onClick={() => { if (confirm('Déconnecter Strava ?')) save({ strava: { clientId: s.strava!.clientId, clientSecret: s.strava!.clientSecret } }); }}>Déconnecter</button>
+            <ConfirmButton class="block" confirmLabel="Confirmer la déconnexion" onConfirm={() => save({ strava: { clientId: s.strava!.clientId, clientSecret: s.strava!.clientSecret } })}>Déconnecter</ConfirmButton>
           </>
         ) : (
           <>

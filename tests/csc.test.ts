@@ -65,3 +65,18 @@ describe('WheelTracker', () => {
     expect(new WheelTracker(2105).speedKmh(0)).toBe(0);
   });
 });
+
+describe('arrêt long', () => {
+  test("pas de pic de vitesse après un arrêt d'environ 64 s (rebouclage du temps)", () => {
+    const t = new WheelTracker(2105);
+    t.update(0, 0, 0);
+    t.update(4, 1024, 1000);
+    // arrêt de 64,05 s : le temps 16 bits a presque fait un tour complet
+    t.update(5, (1024 + 65536 + 51) % 65536, 65050);
+    expect(t.speedKmh(65050)).toBeLessThan(60);
+    expect(t.distanceM()).toBeCloseTo(5 * 2.105, 5);
+    // la vitesse reprend normalement au paquet suivant
+    t.update(9, (1024 + 65536 + 51 + 1024) % 65536, 66050);
+    expect(t.speedKmh(66050)).toBeCloseTo(30.312, 2);
+  });
+});
