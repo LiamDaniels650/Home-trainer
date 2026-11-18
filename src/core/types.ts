@@ -90,3 +90,20 @@ export interface StepResult {
   avgPower: number | null;
   avgHr: number | null;
 }
+
+export interface RoutePoint {
+  lat: number;
+  lon: number;
+  ele: number;
+  /** distance cumulée depuis le départ (m) */
+  d: number;
+}
+
+export interface Route {
+  id: string;
+  name: string;
+  points: RoutePoint[];
+  distanceM: number;
+  gainM: number;
+  hasElevation: boolean;
+}
