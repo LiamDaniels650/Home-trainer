@@ -14,7 +14,7 @@ const summary = { durationS: 1, distanceM: 8, avgSpeed: 30, maxSpeed: 30, avgHr:
 const sess = (id: string, startedAt: string): Session => ({ id, startedAt, samples: [{ t: 1, distM: 8, speed: 30, hr: null, power: 213, level: 3 }], summary });
 
 test('réglages par défaut', async () => {
-  expect(await db.getSettings()).toEqual({ circumferenceMm: 2105, defaultLevel: 3, hrMax: 190, calib: 1, autoPause: true, ftp: 200 });
+  expect(await db.getSettings()).toEqual({ circumferenceMm: 2105, defaultLevel: 3, hrMax: 190, calib: 1, autoPause: true, ftp: 200, massKg: 80 });
 });
 
 test('réglages : sauvegarde', async () => {
@@ -113,4 +113,51 @@ test('import : résultats de séance guidée recalculés', async () => {
     workout: { name: 'W', ftp: 250, steps: [{ durationS: 60, kind: 'work', pct: 90 }], results: 'abîmé' } };
   await db.importAll(JSON.stringify({ app: 'home-trainer', version: 1, sessions: [g] }));
   expect((await db.getSession('g'))!.workout!.results).toEqual([{ durationS: 1, avgPower: 220, avgHr: 150 }]);
+});
+
+const route = { id: 'r1', name: 'Col', distanceM: 1000, gainM: 50, hasElevation: true,
+  points: [{ lat: 45, lon: 6, ele: 100, d: 0 }, { lat: 45.009, lon: 6, ele: 150, d: 1000 }] };
+
+test('routes : enregistrer, lister, supprimer', async () => {
+  await db.saveRoute(route);
+  expect(await db.listRoutes()).toEqual([route]);
+  await db.deleteRoute('r1');
+  expect(await db.listRoutes()).toEqual([]);
+});
+
+test('les routes sont dans la sauvegarde', async () => {
+  await db.saveRoute(route);
+  const json = await db.exportAll();
+  await db._closeForTests();
+  globalThis.indexedDB = new IDBFactory();
+  await db.importAll(json);
+  expect((await db.listRoutes()).map((r) => r.id)).toEqual(['r1']);
+});
+
+test('import : route invalide refusée', async () => {
+  const bad = { ...route, points: [{ lat: 'x' }] };
+  await expect(db.importAll(JSON.stringify({ app: 'home-trainer', version: 1, sessions: [], routes: [bad] }))).rejects.toThrow(/fichier/i);
+});
+
+test('import : séance sur route conservée', async () => {
+  const s = { ...sess('sr', '2026-11-03T10:00:00Z'),
+    samples: [{ t: 1, distM: 8, speed: 30, hr: null, power: 213, level: 3, routeDistM: 5, vSpeed: 18, lat: 45, lon: 6, ele: 100 }],
+    route: { id: 'r1', name: 'Col', distanceM: 1000, gainM: 50, routeDistM: 5, gainDoneM: 0, completed: false } };
+  await db.importAll(JSON.stringify({ app: 'home-trainer', version: 1, sessions: [s] }));
+  const back = await db.getSession('sr');
+  expect(back!.route).toEqual(s.route);
+  expect(back!.samples[0].lat).toBe(45);
+});
+
+test('migration : une base v2 existante garde ses séances guidées', async () => {
+  const { openDB } = await import('idb');
+  await db._closeForTests();
+  globalThis.indexedDB = new IDBFactory();
+  const v2 = await openDB('home-trainer', 2, { upgrade(d) {
+    d.createObjectStore('sessions', { keyPath: 'id' }); d.createObjectStore('kv'); d.createObjectStore('workouts', { keyPath: 'id' });
+  } });
+  await v2.put('workouts', { id: 'w', name: 'W', steps: [] });
+  v2.close();
+  expect((await db.listWorkouts()).map((w) => w.id)).toEqual(['w']);
+  expect(await db.listRoutes()).toEqual([]);
 });

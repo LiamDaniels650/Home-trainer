@@ -1,7 +1,7 @@
 import { openDB, type IDBPDatabase } from 'idb';
 import { summarize } from '../core/recorder';
 import { stepResults } from '../core/workout';
-import type { Draft, Sample, Session, Workout } from '../core/types';
+import type { Draft, Route, Sample, Session, SessionRoute, Workout } from '../core/types';
 
 export interface StravaSettings {
   clientId: string;
@@ -20,24 +20,27 @@ export interface Settings {
   autoPause: boolean;
   /** puissance au seuil (W), pour les cibles des séances guidées */
   ftp: number;
+  /** poids cycliste + vélo (kg), pour la vitesse sur route */
+  massKg: number;
   strava?: StravaSettings;
   lastSpeedDeviceId?: string;
   lastHrDeviceId?: string;
 }
 
-export const DEFAULT_SETTINGS: Settings = { circumferenceMm: 2105, defaultLevel: 3, hrMax: 190, calib: 1, autoPause: true, ftp: 200 };
+export const DEFAULT_SETTINGS: Settings = { circumferenceMm: 2105, defaultLevel: 3, hrMax: 190, calib: 1, autoPause: true, ftp: 200, massKg: 80 };
 
 let dbp: Promise<IDBPDatabase> | null = null;
 
 function db(): Promise<IDBPDatabase> {
   if (!dbp) {
-    dbp = openDB('home-trainer', 2, {
+    dbp = openDB('home-trainer', 3, {
       upgrade(d, oldVersion) {
         if (oldVersion < 1) {
           d.createObjectStore('sessions', { keyPath: 'id' });
           d.createObjectStore('kv');
         }
         if (oldVersion < 2) d.createObjectStore('workouts', { keyPath: 'id' });
+        if (oldVersion < 3) d.createObjectStore('routes', { keyPath: 'id' });
       },
     });
   }
@@ -100,10 +103,27 @@ export async function deleteWorkout(id: string): Promise<void> {
   await (await db()).delete('workouts', id);
 }
 
+export async function saveRoute(r: Route): Promise<void> {
+  await (await db()).put('routes', r);
+}
+
+export async function listRoutes(): Promise<Route[]> {
+  const all = (await (await db()).getAll('routes')) as Route[];
+  return all.sort((a, b) => a.name.localeCompare(b.name, 'fr'));
+}
+
+export async function getRoute(id: string): Promise<Route | undefined> {
+  return (await (await db()).get('routes', id)) as Route | undefined;
+}
+
+export async function deleteRoute(id: string): Promise<void> {
+  await (await db()).delete('routes', id);
+}
+
 /** Sauvegarde complète en JSON. Les identifiants et jetons Strava n'y figurent jamais. */
 export async function exportAll(): Promise<string> {
   const { strava: _omit, lastHrDeviceId: _h, lastSpeedDeviceId: _s, ...settings } = await getSettings();
-  return JSON.stringify({ app: 'home-trainer', version: 1, exportedAt: new Date().toISOString(), settings, sessions: await listSessions(), workouts: await listWorkouts() });
+  return JSON.stringify({ app: 'home-trainer', version: 1, exportedAt: new Date().toISOString(), settings, sessions: await listSessions(), workouts: await listWorkouts(), routes: await listRoutes() });
 }
 
 const BAD_FILE = "Ce fichier n'est pas une sauvegarde valide de l'app Home Trainer.";
@@ -121,6 +141,19 @@ function isSession(x: unknown): x is Session {
     && Array.isArray(s.samples) && s.samples.every(isSample);
 }
 
+function isRoute(x: unknown): x is Route {
+  const r = x as Route;
+  return !!r && typeof r.id === 'string' && typeof r.name === 'string' && isNum(r.distanceM) && isNum(r.gainM)
+    && Array.isArray(r.points) && r.points.length >= 2
+    && r.points.every((p) => isNum(p.lat) && isNum(p.lon) && isNum(p.ele) && isNum(p.d));
+}
+
+function isSessionRoute(x: unknown): x is SessionRoute {
+  const r = x as SessionRoute;
+  return !!r && typeof r.id === 'string' && typeof r.name === 'string' && isNum(r.distanceM) && isNum(r.gainM)
+    && isNum(r.routeDistM) && isNum(r.gainDoneM) && typeof r.completed === 'boolean';
+}
+
 function isWorkout(x: unknown): x is Workout {
   const w = x as Workout;
   return !!w && typeof w.id === 'string' && typeof w.name === 'string' && Array.isArray(w.steps)
@@ -129,19 +162,20 @@ function isWorkout(x: unknown): x is Workout {
 
 /** Importe une sauvegarde. Les séances déjà présentes (même id) sont ignorées. */
 export async function importAll(json: string): Promise<{ added: number; skipped: number }> {
-  let data: { app?: string; version?: number; sessions?: unknown[]; workouts?: unknown[]; settings?: { hrMax?: number } };
+  let data: { app?: string; version?: number; sessions?: unknown[]; workouts?: unknown[]; routes?: unknown[]; settings?: { hrMax?: number } };
   try {
     data = JSON.parse(json);
   } catch {
     throw new Error(BAD_FILE);
   }
   if (!data || data.app !== 'home-trainer' || !Array.isArray(data.sessions) || !data.sessions.every(isSession)
-    || (data.workouts !== undefined && !(Array.isArray(data.workouts) && data.workouts.every(isWorkout)))) {
+    || (data.workouts !== undefined && !(Array.isArray(data.workouts) && data.workouts.every(isWorkout)))
+    || (data.routes !== undefined && !(Array.isArray(data.routes) && data.routes.every(isRoute)))) {
     throw new Error(BAD_FILE);
   }
   const hrMax = isNum(data.settings?.hrMax) ? data.settings!.hrMax! : (await getSettings()).hrMax;
   const d = await db();
-  const tx = d.transaction(['sessions', 'workouts'], 'readwrite');
+  const tx = d.transaction(['sessions', 'workouts', 'routes'], 'readwrite');
   const sessions = tx.objectStore('sessions');
   let added = 0, skipped = 0;
   for (const s of data.sessions as Session[]) {
@@ -153,12 +187,17 @@ export async function importAll(json: string): Promise<{ added: number; skipped:
     if (s.workout && isWorkout({ id: 'x', ...s.workout }) && isNum(s.workout.ftp)) {
       clean.workout = { name: s.workout.name, ftp: s.workout.ftp, steps: s.workout.steps, results: stepResults(s.samples, s.workout.steps) };
     }
+    if (isSessionRoute(s.route)) clean.route = s.route;
     await sessions.put(clean);
     added++;
   }
   const workouts = tx.objectStore('workouts');
   for (const w of (data.workouts ?? []) as Workout[]) {
     if (!(await workouts.get(w.id))) await workouts.put(w);
+  }
+  const routes = tx.objectStore('routes');
+  for (const r of (data.routes ?? []) as Route[]) {
+    if (!(await routes.get(r.id))) await routes.put(r);
   }
   await tx.done;
   return { added, skipped };
