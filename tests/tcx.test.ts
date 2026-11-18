@@ -65,3 +65,25 @@ test('séance guidée : un tour par étape effectuée', () => {
   expect(Number(own(laps[1], 'DistanceMeters'))).toBeCloseTo(9, 2);
   expect(Number(own(laps[0], 'DistanceMeters'))).toBeCloseTo(16, 2);
 });
+
+test('séance sur route : position, altitude, distance et vitesse de la route', () => {
+  const s3: Sample[] = [
+    { t: 1, distM: 8, speed: 30, hr: 140, power: 213, level: 3, routeDistM: 5, vSpeed: 18, lat: 45.00005, lon: 6, ele: 100.5 },
+    { t: 2, distM: 16, speed: 30, hr: 140, power: 213, level: 3, routeDistM: 11, vSpeed: 21.6, lat: 45.0001, lon: 6, ele: 101 },
+    { t: 3, distM: 24, speed: 30, hr: 140, power: 213, level: 3 }, // roue libre après la fin de la route
+  ];
+  const sess: Session = { id: 'r', startedAt: '2026-11-17T18:00:00.000Z', samples: s3, summary: summarize(s3, 190),
+    route: { id: 'x', name: 'R', distanceM: 11, gainM: 1, routeDistM: 11, gainDoneM: 1, completed: true } };
+  const doc = parse(toTcx(sess));
+  const tps = doc.getElementsByTagName('Trackpoint');
+  expect(tps[0].getElementsByTagName('LatitudeDegrees')[0].textContent).toBe('45.0000500');
+  expect(tps[0].getElementsByTagName('LongitudeDegrees')[0].textContent).toBe('6.0000000');
+  expect(Number(tps[1].getElementsByTagName('AltitudeMeters')[0].textContent)).toBeCloseTo(101, 1);
+  expect(Number(tps[1].getElementsByTagName('DistanceMeters')[0].textContent)).toBeCloseTo(11, 2);
+  expect(Number(tps[1].getElementsByTagName('ns3:Speed')[0].textContent)).toBeCloseTo(6, 3);
+  // après la route : la distance continue avec la roue (11 + 8), sans position
+  expect(Number(tps[2].getElementsByTagName('DistanceMeters')[0].textContent)).toBeCloseTo(19, 2);
+  expect(tps[2].getElementsByTagName('Position')).toHaveLength(0);
+  const lap = doc.getElementsByTagName('Lap')[0];
+  expect(Number([...lap.children].find((c) => c.tagName === 'DistanceMeters')!.textContent)).toBeCloseTo(19, 2);
+});

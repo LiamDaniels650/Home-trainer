@@ -132,3 +132,27 @@ test('erreur réseau : message français proposant l\'export', async () => {
 test('non connecté', async () => {
   await expect(uploadSession(session, DEFAULT_SETTINGS)).rejects.toThrow(/Réglages/);
 });
+
+test('séance sur route : passage en Vélo virtuel', async () => {
+  const { setVirtualRide } = await import('../src/io/strava');
+  fetchMock.mockResolvedValueOnce(json({ id: 55, sport_type: 'VirtualRide' }));
+  await setVirtualRide(55, connected);
+  const [url, init] = fetchMock.mock.calls[0];
+  expect(url).toBe('https://www.strava.com/api/v3/activities/55');
+  expect(init.method).toBe('PUT');
+  expect(init.headers.Authorization).toBe('Bearer tok');
+  expect(JSON.parse(init.body)).toEqual({ sport_type: 'VirtualRide' });
+});
+
+test('Vélo virtuel refusé : message clair', async () => {
+  const { setVirtualRide } = await import('../src/io/strava');
+  fetchMock.mockResolvedValueOnce(json({ message: 'Forbidden' }, 403));
+  await expect(setVirtualRide(55, connected)).rejects.toThrow(/Vélo virtuel/);
+});
+
+test("nom de l'activité : nom de la route", async () => {
+  fetchMock.mockResolvedValueOnce(json({ id: 1, status: 'ok', activity_id: 5, error: null }, 201));
+  const onRoute = { ...session, route: { id: 'x', name: 'Alpe test', distanceM: 1, gainM: 0, routeDistM: 1, gainDoneM: 0, completed: true } };
+  await uploadSession(onRoute, connected);
+  expect((fetchMock.mock.calls[0][1].body as FormData).get('name')).toBe('Home trainer · Alpe test');
+});

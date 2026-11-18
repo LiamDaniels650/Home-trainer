@@ -17,22 +17,34 @@ function splitLaps(samples: Sample[]): Sample[][] {
 export function toTcx(s: Session): string {
   const start = new Date(s.startedAt).getTime();
   const iso = (t: number) => new Date(start + t * 1000).toISOString();
+
+  // Séance sur route : distance et vitesse de la route (cohérentes avec la carte), puis la roue après la fin.
+  const distOf = new Map<Sample, number>();
+  let lastRoute = 0, wheelAtLast = 0;
+  for (const p of s.samples) {
+    if (s.route && p.routeDistM != null) { lastRoute = p.routeDistM; wheelAtLast = p.distM; distOf.set(p, p.routeDistM); }
+    else distOf.set(p, s.route ? lastRoute + (p.distM - wheelAtLast) : p.distM);
+  }
+  const speedOf = (p: Sample) => (s.route && p.vSpeed != null ? p.vSpeed : p.speed);
+
   const point = (p: Sample) => [
     '<Trackpoint>',
     `<Time>${iso(p.t)}</Time>`,
-    `<DistanceMeters>${p.distM.toFixed(2)}</DistanceMeters>`,
+    p.lat != null && p.lon != null ? `<Position><LatitudeDegrees>${p.lat.toFixed(7)}</LatitudeDegrees><LongitudeDegrees>${p.lon.toFixed(7)}</LongitudeDegrees></Position>` : '',
+    p.ele != null ? `<AltitudeMeters>${p.ele.toFixed(1)}</AltitudeMeters>` : '',
+    `<DistanceMeters>${distOf.get(p)!.toFixed(2)}</DistanceMeters>`,
     p.hr != null ? `<HeartRateBpm><Value>${p.hr}</Value></HeartRateBpm>` : '',
-    `<Extensions><ns3:TPX><ns3:Speed>${(p.speed / 3.6).toFixed(3)}</ns3:Speed><ns3:Watts>${p.power}</ns3:Watts></ns3:TPX></Extensions>`,
+    `<Extensions><ns3:TPX><ns3:Speed>${(speedOf(p) / 3.6).toFixed(3)}</ns3:Speed><ns3:Watts>${p.power}</ns3:Watts></ns3:TPX></Extensions>`,
     '</Trackpoint>',
   ].join('');
 
   let prevDist = 0;
   const laps = splitLaps(s.samples).map((pts, i) => {
-    const endDist = pts.length ? pts[pts.length - 1].distM : 0;
+    const endDist = pts.length ? distOf.get(pts[pts.length - 1])! : 0;
     const dist = endDist - prevDist;
     prevDist = endDist;
     const avgPower = pts.length ? pts.reduce((a, p) => a + p.power, 0) / pts.length : 0;
-    const maxSpeed = pts.length ? Math.max(...pts.map((p) => p.speed)) : 0;
+    const maxSpeed = pts.length ? Math.max(...pts.map(speedOf)) : 0;
     const startTime = i === 0 || !pts.length ? new Date(start).toISOString() : iso(pts[0].t);
     return `<Lap StartTime="${startTime}">
 <TotalTimeSeconds>${pts.length}</TotalTimeSeconds>

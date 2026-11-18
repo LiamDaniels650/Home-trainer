@@ -98,7 +98,8 @@ export async function uploadSession(s: Session, settings: Settings): Promise<Upl
   fd.append('file', new Blob([toTcx(s)], { type: 'application/vnd.garmin.tcx+xml' }), `${s.id}.tcx`);
   fd.append('data_type', 'tcx');
   fd.append('trainer', '1');
-  fd.append('name', s.workout ? `Home trainer · ${s.workout.name}` : 'Home trainer');
+  const label = s.route?.name ?? s.workout?.name;
+  fd.append('name', label ? `Home trainer · ${label}` : 'Home trainer');
   fd.append('external_id', `${s.id}.tcx`);
   let u = await readStatus(await call(`${API}/uploads`, { method: 'POST', headers, body: fd }));
   for (let i = 0; ; i++) {
@@ -113,4 +114,16 @@ export async function uploadSession(s: Session, settings: Settings): Promise<Upl
     u = await readStatus(await call(`${API}/uploads/${u.id}`, { headers }));
   }
   throw new Error('Strava met du temps à traiter la séance. Vérifie sur Strava dans quelques minutes.');
+}
+
+/** Séance sur route : l'activité est marquée « Vélo virtuel » (pas de segments réels faussés). */
+export async function setVirtualRide(activityId: number, settings: Settings): Promise<void> {
+  const token = settings.strava?.accessToken;
+  if (!token) throw new Error('Strava n\'est pas connecté.');
+  const res = await call(`${API}/activities/${activityId}`, {
+    method: 'PUT',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sport_type: 'VirtualRide' }),
+  });
+  if (!res.ok) throw new Error(`Séance envoyée, mais Strava a refusé de la passer en « Vélo virtuel » (${res.status}) : change le type sur Strava.`);
 }
