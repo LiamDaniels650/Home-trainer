@@ -1,6 +1,6 @@
 import { WheelTracker } from '../core/csc';
 import { Recorder } from '../core/recorder';
-import type { Draft, Sample, Session, Workout } from '../core/types';
+import type { Draft, Route, Sample, Session, Workout } from '../core/types';
 import { stepAt, type StepPosition } from '../core/workout';
 import { beep } from '../io/audio';
 import { getSensors, type SensorKind, type SensorState } from '../io/ble';
@@ -126,19 +126,24 @@ let active: RideController | null = null;
 export const activeRide = () => active;
 
 let pending: Workout | null = null;
+let pendingRouteV: Route | null = null;
 
-/** Séance guidée choisie, utilisée au prochain « Commencer ». */
-export function setPendingWorkout(w: Workout | null): void { pending = w; }
+/** Séance guidée choisie, utilisée au prochain « Commencer » (remplace une route choisie). */
+export function setPendingWorkout(w: Workout | null): void { pending = w; if (w) pendingRouteV = null; }
 export function pendingWorkout(): Workout | null { return pending; }
+/** Route choisie, utilisée au prochain « Commencer » (remplace une séance guidée choisie). */
+export function setPendingRoute(r: Route | null): void { pendingRouteV = r; if (r) pending = null; }
+export function pendingRoute(): Route | null { return pendingRouteV; }
 
 export async function startRide(draft: Draft | null): Promise<RideController> {
   active?.stop();
   const st = await db.getSettings();
   const workout = draft ? undefined : pending ?? undefined;
-  if (!draft) pending = null; // en cas de reprise, la séance choisie reste en attente
+  const route = draft ? undefined : pendingRouteV ?? undefined;
+  if (!draft) { pending = null; pendingRouteV = null; } // en cas de reprise, le choix reste en attente
   const rec = draft
     ? Recorder.restore(draft)
-    : new Recorder({ startedAt: new Date(), level: st.defaultLevel, calib: st.calib, hrMax: st.hrMax, autoPause: st.autoPause, workout, ftp: st.ftp });
+    : new Recorder({ startedAt: new Date(), level: st.defaultLevel, calib: st.calib, hrMax: st.hrMax, autoPause: st.autoPause, workout, ftp: st.ftp, route, massKg: st.massKg });
   active = new RideController(rec, st.circumferenceMm, draft?.calib ?? st.calib);
   await db.saveDraft(rec.toDraft());
   return active;

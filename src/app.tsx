@@ -7,6 +7,7 @@ import { SessionDetail } from './ui/SessionDetail';
 import { SettingsScreen } from './ui/Settings';
 import { WorkoutDetail, WorkoutList } from './ui/Workouts';
 import { WorkoutEditor } from './ui/WorkoutEditor';
+import { RouteDetail } from './ui/Routes';
 import { StravaActions } from './ui/StravaActions';
 import * as db from './io/db';
 import { handleOAuthRedirect } from './io/strava';
@@ -51,6 +52,7 @@ function Screen({ path, notice }: { path: string; notice: string }) {
     return <WorkoutEditor key={path} fromId={from} />;
   }
   if (path.startsWith('/seances/modifier/')) return <WorkoutEditor key={path} editId={decodeURIComponent(path.slice(18))} />;
+  if (path.startsWith('/routes/')) return <RouteDetail id={decodeURIComponent(path.slice(8))} />;
   if (path.startsWith('/seances/')) return <WorkoutDetail id={decodeURIComponent(path.slice(9))} />;
   if (path === '/parametres') return <SettingsScreen notice={notice} />;
   return <div><h1>Page introuvable</h1><a href="#/">Accueil</a></div>;

@@ -10,6 +10,46 @@ import { KIND_LABELS, powerStatus, speedForPower, targetWatts } from '../core/wo
 import { WorkoutProfile } from './WorkoutProfile';
 import type { RideView } from './ride';
 import { unlockAudio } from '../io/audio';
+import { gradeAt, positionAt, remainingGain, suggestLevel } from '../core/gpx';
+import type { Route, RouteState } from '../core/types';
+import { RouteProfile, RouteTrace } from './RouteViews';
+
+function gradeColor(g: number): string {
+  if (g < 2) return 'var(--z2)';
+  if (g < 5) return 'var(--z3)';
+  if (g < 8) return 'var(--z4)';
+  return 'var(--z5)';
+}
+
+function RoutePanel({ route, rs, level, baseLevel, onSetLevel }:
+  { route: Route; rs: RouteState; level: number; baseLevel: number; onSetLevel: (n: number) => void }) {
+  if (rs.done) {
+    return <div class="card wk"><b>{route.name} terminée ✓</b><div class="small muted">{fmtKm(route.distanceM)} km bouclés. L'enregistrement continue en roue libre. Touche « Terminer » quand tu veux.</div></div>;
+  }
+  const grade = gradeAt(route, rs.distM);
+  const advice = suggestLevel(grade, baseLevel);
+  const here = positionAt(route, rs.distM);
+  return (
+    <div class="card wk">
+      <div class="wk-top">
+        <span class="wk-name" style={`color:${gradeColor(grade)}`}>{fmtNum(grade)} %</span>
+        {advice !== level
+          ? <button class="primary mini" onClick={() => onSetLevel(advice)}>Passe au niveau {advice}</button>
+          : <span class="small st-ok" style="font-weight:600">Niveau {level} ✓</span>}
+      </div>
+      <div style="margin-top:6px"><RouteProfile points={route.points} pos={rs.distM} height={60} /></div>
+      <div style="display:flex;gap:10px;align-items:center;margin-top:6px">
+        <div style="flex:1" class="small">
+          <div class="row"><span class="muted">Parcouru</span><b>{fmtKm(rs.distM)} / {fmtKm(route.distanceM)} km</b></div>
+          <div class="row"><span class="muted">D+ restant</span><b>{Math.round(remainingGain(route, rs.distM))} m</b></div>
+          <div class="row"><span class="muted">Altitude</span><b>{Math.round(here.ele)} m</b></div>
+          <div class="row"><span class="muted">Vitesse route</span><b>{fmtNum(rs.v * 3.6)} km/h</b></div>
+        </div>
+        <RouteTrace points={route.points} pos={here} size={86} />
+      </div>
+    </div>
+  );
+}
 
 function WorkoutPanel({ v, steps, name }: { v: RideView; steps: import('../core/types').WorkoutStep[]; name: string }) {
   if (v.workoutDone) {
@@ -56,6 +96,10 @@ export function Ride() {
     <div class="ride">
       {(v.speedState === 'reconnexion' || v.hrState === 'reconnexion') && (
         <div class="banner small">Reconnexion {v.speedState === 'reconnexion' ? 'du capteur de vitesse' : 'de la ceinture'}… l'enregistrement continue.</div>
+      )}
+      {ride.recorder.route && ride.recorder.routeState && settings && (
+        <RoutePanel route={ride.recorder.route} rs={ride.recorder.routeState} level={v.level} baseLevel={settings.defaultLevel}
+          onSetLevel={(n) => { unlockAudio(); ride.setLevel(n); }} />
       )}
       {ride.recorder.workout && <WorkoutPanel v={v} steps={ride.recorder.workout.steps} name={ride.recorder.workout.name} />}
       <div class="ride-time">{fmtDuration(v.elapsedS)}{status && <span class="ride-status">{status}</span>}</div>

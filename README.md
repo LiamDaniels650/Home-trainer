@@ -5,6 +5,7 @@ avec un **capteur de vitesse Bluetooth** et une **ceinture cardio Bluetooth**, s
 
 - Distance et vitesse calculées à partir des tours de roue réels et de ta circonférence de roue
 - Puissance **estimée** (vitesse + niveau de résistance 1 à 8), cohérente d'une séance à l'autre
+- **Routes GPX** : roule sur une vraie route (profil, tracé, pente, niveau conseillé, vitesse réaliste selon ton poids)
 - **Séances guidées** (fractionné) : cible en watts et **vitesse à tenir** à ton niveau de résistance, compte à rebours, bips
 - Historique, graphiques, zones cardio, progression, records
 - Envoi direct vers **Strava**, ou export `.tcx`
@@ -53,7 +54,19 @@ L'app est un site statique hébergé gratuitement sur GitHub Pages. Seul le code
    Des bips annoncent les changements d'étape (garde le son de l'iPhone activé).
 4. Sur Strava, chaque étape devient un tour.
 
-## 6. Connecter Strava (une seule fois)
+## 6. Rouler sur une route (GPX)
+
+1. Exporte un itinéraire en **GPX** : sur Strava, Komoot ou Garmin Connect, choisis « Exporter GPX » et enregistre-le dans Fichiers.
+2. Onglet **Séances → Routes → Importer un fichier GPX**.
+3. Dans **Réglages → Routes**, renseigne ton **poids total** (toi + vélo).
+4. **Rouler sur cette route** → capteurs → **Commencer**. Pendant la séance, l'app affiche :
+   - la pente des 100 m à venir ;
+   - **« Passe au niveau X »** quand il faut bouger la manette (touche le bouton une fois la manette réglée) ;
+   - le profil, le tracé, les km et le dénivelé restants ;
+   - la vitesse sur la route, calculée à partir de ta puissance, de ton poids et de la pente.
+5. Sur Strava, la séance arrive avec la carte du tracé, en **Vélo virtuel**. La distance de l'historique reste celle de ton capteur de roue.
+
+## 7. Connecter Strava (une seule fois)
 
 1. Sur un navigateur connecté à Strava, va sur **https://www.strava.com/settings/api** et crée une application :
    - Nom : `Home Trainer` · Catégorie : `Training`

@@ -56,6 +56,13 @@ export function SettingsScreen({ notice }: { notice?: string }) {
         </label>
       </div>
 
+      <h2>Routes</h2>
+      <div class="card">
+        <label>Poids total : toi + vélo (kg)</label>
+        <input inputMode="decimal" value={String(s.massKg).replace('.', ',')} onChange={(e) => save({ massKg: num(e.currentTarget, 30, 200, s.massKg) })} />
+        <div class="small muted" style="margin-top:6px">Sert à calculer ta vitesse sur une route : plus tu es lourd, plus les montées sont lentes.</div>
+      </div>
+
       <h2>Cardio</h2>
       <div class="card">
         <label>Fréquence cardiaque max (bpm)</label>

@@ -3,7 +3,7 @@ import { toTcx } from '../core/tcx';
 import type { Session } from '../core/types';
 import * as db from '../io/db';
 import { shareFile } from '../io/files';
-import { ensureFreshToken, isStravaConnected, uploadSession } from '../io/strava';
+import { ensureFreshToken, isStravaConnected, setVirtualRide, uploadSession } from '../io/strava';
 
 export function tcxName(s: Session): string {
   return `home-trainer-${s.startedAt.slice(0, 16).replace(/[:T]/g, '-')}.tcx`;
@@ -23,7 +23,18 @@ export function StravaActions({ session, reload }: { session: Session; reload: (
       if (fresh !== st) await db.saveSettings((st = fresh));
       const { activityId, duplicate } = await uploadSession(session, st);
       await db.saveSession({ ...session, stravaId: activityId });
-      setMsg({ ok: true, text: duplicate ? 'Cette séance était déjà sur Strava ✓' : 'Séance envoyée sur Strava ✓' });
+      let text = duplicate ? 'Cette séance était déjà sur Strava ✓' : 'Séance envoyée sur Strava ✓';
+      if (session.route && !duplicate) {
+        try {
+          await setVirtualRide(activityId, st);
+          text += ' (Vélo virtuel)';
+        } catch (e) {
+          setMsg({ ok: false, text: (e as Error).message });
+          reload();
+          return;
+        }
+      }
+      setMsg({ ok: true, text });
       reload();
     } catch (e) {
       setMsg({ ok: false, text: (e as Error).message });

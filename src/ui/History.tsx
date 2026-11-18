@@ -13,7 +13,7 @@ export function History() {
         <a class="card" style="display:block;color:inherit;text-decoration:none" href={'#/historique/' + s.id}>
           <div class="row">
             <span class="muted small">{fmtDate(s.startedAt)}</span>
-            <span>{s.workout && <span class="small" style="margin-right:6px">{s.workout.name}</span>}{s.stravaId && <span class="badge">Strava ✓</span>}</span>
+            <span>{(s.workout || s.route) && <span class="small" style="margin-right:6px">{s.route?.name ?? s.workout!.name}</span>}{s.stravaId && <span class="badge">Strava ✓</span>}</span>
           </div>
           <div class="row" style="margin-top:6px">
             <span><b>{fmtDuration(s.summary.durationS)}</b></span>

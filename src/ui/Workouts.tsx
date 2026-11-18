@@ -7,6 +7,7 @@ import { fmtDuration } from './format';
 import { useAsync } from './hooks';
 import { activeRide, setPendingWorkout } from './ride';
 import { WorkoutProfile } from './WorkoutProfile';
+import { RouteSection } from './Routes';
 
 export async function findWorkout(id: string): Promise<Workout | undefined> {
   return PRESETS.find((w) => w.id === id) ?? (await db.listWorkouts()).find((w) => w.id === id);
@@ -25,13 +26,16 @@ export function WorkoutList() {
   const [mine] = useAsync(() => db.listWorkouts());
   return (
     <div>
-      <h1>Séances guidées</h1>
+      <h1>Séances</h1>
+      <p class="small muted" style="margin:-8px 0 8px"><a href="#/seances" onClick={(e) => { e.preventDefault(); document.querySelector('#routes-anchor')?.scrollIntoView({ behavior: 'smooth' }); }}>Aller aux routes ↓</a></p>
+      <h2 style="margin-top:0">Séances guidées</h2>
       <p class="small muted" style="margin-top:-8px">L'app te donne la puissance cible et la vitesse à tenir à ton niveau de résistance.</p>
       <button class="primary block" onClick={() => navigate('/seances/nouvelle')}>Créer une séance</button>
       {!!mine?.length && <h2>Mes séances</h2>}
       {mine?.map((w) => <Card w={w} />)}
       <h2>Séances prêtes à l'emploi</h2>
       {PRESETS.map((w) => <Card w={w} />)}
+      <RouteSection />
     </div>
   );
 }

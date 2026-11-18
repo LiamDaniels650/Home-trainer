@@ -4,7 +4,7 @@ import { getSensors, type SensorKind } from '../io/ble';
 import * as db from '../io/db';
 import { keepAwake } from '../io/wakelock';
 import { useAsync } from './hooks';
-import { activeRide, pendingWorkout, setPendingWorkout, startRide } from './ride';
+import { activeRide, pendingRoute, pendingWorkout, setPendingRoute, setPendingWorkout, startRide } from './ride';
 import { unlockAudio } from '../io/audio';
 
 const LABELS: Record<string, string> = { deconnecte: 'Non connecté', connexion: 'Connexion…', connecte: 'Connecté', reconnexion: 'Reconnexion…' };
@@ -49,8 +49,12 @@ export function Connect() {
   return (
     <div>
       <h1>Capteurs</h1>
-      {pendingWorkout() && resuming && (
-        <div class="banner small">Une séance précédente n'est pas terminée : elle sera reprise d'abord. Termine-la depuis l'accueil pour lancer « {pendingWorkout()!.name} ».</div>
+      {pendingRoute() && !activeRide() && !resuming && (
+        <div class="card row"><span>Route : <b>{pendingRoute()!.name}</b></span>
+          <button class="mini" onClick={() => { setPendingRoute(null); force((n) => n + 1); }}>Retirer</button></div>
+      )}
+      {(pendingWorkout() || pendingRoute()) && resuming && (
+        <div class="banner small">Une séance précédente n'est pas terminée : elle sera reprise d'abord. Termine-la depuis l'accueil pour lancer ton nouveau choix.</div>
       )}
       {pendingWorkout() && !activeRide() && !resuming && (
         <div class="card row"><span>Séance guidée : <b>{pendingWorkout()!.name}</b></span>

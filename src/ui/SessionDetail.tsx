@@ -9,6 +9,7 @@ import type { ComponentChildren } from 'preact';
 import { ConfirmButton } from './ConfirmButton';
 import { KIND_LABELS, targetWatts } from '../core/workout';
 import { pctColor } from './WorkoutProfile';
+import { RouteProfile, RouteTrace } from './RouteViews';
 
 const BEST_LABELS = { '5': '5 s', '60': '1 min', '300': '5 min', '1200': '20 min' } as const;
 
@@ -41,6 +42,27 @@ export function SessionDetail({ id, actions }: { id: string; actions?: (s: impor
       </div>
 
       {actions?.(session, reload)}
+
+      {session.route && (() => {
+        const rp = session.samples.filter((p) => p.routeDistM != null && p.lat != null && p.lon != null && p.ele != null)
+          .map((p) => ({ d: p.routeDistM!, ele: p.ele!, lat: p.lat!, lon: p.lon! }));
+        const rt = session.route!;
+        return (
+          <div class="card">
+            <div class="small muted" style="margin-bottom:8px">Route : <b style="color:var(--text)">{rt.name}</b>{rt.completed ? ' · terminée ✓' : ''}</div>
+            <div class="grid2" style="grid-template-columns:1fr 1fr 1fr;margin-bottom:8px">
+              <div class="stat"><div class="v">{fmtKm(rt.routeDistM)}</div><div class="l">km sur la route</div></div>
+              <div class="stat"><div class="v">{Math.round(rt.gainDoneM)}</div><div class="l">m D+ grimpés</div></div>
+              <div class="stat"><div class="v">{Math.round((100 * rt.routeDistM) / rt.distanceM)} %</div><div class="l">de la route</div></div>
+            </div>
+            {rp.length >= 2 && <>
+              <RouteProfile points={rp} height={70} />
+              <div style="display:flex;justify-content:center;margin-top:8px"><RouteTrace points={rp} size={160} /></div>
+            </>}
+            <div class="small muted" style="margin-top:6px">La distance en haut ({fmtKm(m.distanceM)} km) est celle mesurée par ton capteur de roue.</div>
+          </div>
+        );
+      })()}
 
       {session.workout && (
         <div class="card">
