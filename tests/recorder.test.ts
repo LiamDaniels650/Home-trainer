@@ -169,3 +169,78 @@ describe('séance guidée', () => {
     expect(r.samples[0].step).toBeUndefined();
   });
 });
+
+describe('séance sur route', () => {
+  // route plate de ~1112 m vers le nord, puis montée
+  const pts = [
+    { lat: 45, lon: 6, ele: 100, d: 0 },
+    { lat: 45.01, lon: 6, ele: 100, d: 1111.95 },
+  ];
+  const route = { id: 'r1', name: 'Plat', points: pts, distanceM: 1111.95, gainM: 0, hasElevation: true };
+  const ropts = { ...opts, route, massKg: 80 };
+
+  test('la route avance selon la puissance, la distance roue reste intacte', () => {
+    const r = new Recorder(ropts);
+    ride(r, 30);
+    const last = r.samples[29];
+    expect(last.distM).toBeCloseTo(30 * STEP, 6); // roue
+    expect(last.routeDistM).toBeGreaterThan(100);
+    expect(last.routeDistM).toBeLessThan(30 * 11);
+    expect(last.vSpeed).toBeGreaterThan(20);
+    expect(last.lat).toBeGreaterThan(45);
+    expect(last.lon).toBeCloseTo(6, 6);
+    expect(last.ele).toBeCloseTo(100, 6);
+    // progression régulière (inertie)
+    for (let i = 1; i < 30; i++) expect(r.samples[i].routeDistM!).toBeGreaterThan(r.samples[i - 1].routeDistM!);
+  });
+
+  test('fin de route : position plafonnée, puis roue libre sans données de route', () => {
+    const r = new Recorder(ropts);
+    ride(r, 200);
+    const withRoute = r.samples.filter((s) => s.routeDistM != null);
+    expect(withRoute.at(-1)!.routeDistM).toBeCloseTo(1111.95, 2);
+    expect(r.samples.at(-1)!.routeDistM).toBeUndefined();
+    expect(r.routeState?.done).toBe(true);
+    const s = r.finish();
+    expect(s.route).toMatchObject({ id: 'r1', name: 'Plat', distanceM: 1111.95, completed: true });
+    expect(s.route!.routeDistM).toBeCloseTo(1111.95, 2);
+  });
+
+  test('pause : la vitesse virtuelle repart de zéro', () => {
+    const r = new Recorder(ropts);
+    ride(r, 20);
+    r.pause();
+    ride(r, 1, 20);
+    r.resume();
+    ride(r, 1, 21);
+    expect(r.samples[20].vSpeed!).toBeLessThan(r.samples[19].vSpeed!);
+  });
+
+  test('brouillon : la route et la position sont reprises', () => {
+    const r = new Recorder(ropts);
+    ride(r, 10);
+    const back = Recorder.restore(JSON.parse(JSON.stringify(r.toDraft())));
+    expect(back.route?.id).toBe('r1');
+    expect(back.routeState!.distM).toBeCloseTo(r.routeState!.distM, 6);
+    ride(back, 1, 10);
+    expect(back.samples[10].routeDistM!).toBeGreaterThan(r.samples[9].routeDistM!);
+  });
+
+  test('séance sans route : aucun champ de route', () => {
+    const r = new Recorder(opts);
+    ride(r, 2);
+    expect(r.samples[0].routeDistM).toBeUndefined();
+    expect(r.finish().route).toBeUndefined();
+  });
+
+  test('dénivelé réalisé', () => {
+    const climb = { id: 'c', name: 'Montée', distanceM: 1111.95, gainM: 50, hasElevation: true,
+      points: [{ lat: 45, lon: 6, ele: 100, d: 0 }, { lat: 45.01, lon: 6, ele: 150, d: 1111.95 }] };
+    const r = new Recorder({ ...opts, route: climb, massKg: 80 });
+    ride(r, 60);
+    const s = r.finish();
+    const lastEle = s.samples.at(-1)!.ele!;
+    expect(s.route!.gainDoneM).toBeCloseTo(lastEle - 100, 6); // depuis le départ de la route
+    expect(s.route!.completed).toBe(false);
+  });
+});

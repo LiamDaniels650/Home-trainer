@@ -1,5 +1,7 @@
 import { bestAverage, estimatePower } from './power';
-import { BEST_KEYS, type Draft, type Sample, type Session, type Summary, type Workout } from './types';
+import { BEST_KEYS, type Draft, type Route, type RouteState, type Sample, type Session, type Summary, type Workout } from './types';
+import { gradeAt, positionAt } from './gpx';
+import { advanceSpeed } from './physics';
 import { stepAt, stepResults } from './workout';
 import { hrZone } from './zones';
 
@@ -12,6 +14,9 @@ export interface RecorderOptions {
   id?: string;
   workout?: Workout;
   ftp?: number;
+  route?: Route;
+  /** poids cycliste + vélo, pour la vitesse virtuelle */
+  massKg?: number;
 }
 
 export interface TickInput {
@@ -37,11 +42,13 @@ export class Recorder {
   private _autoPaused = false;
   private lastInputDist = 0;
   private dist = 0;
+  private rs: RouteState | undefined;
 
   constructor(private opts: RecorderOptions) {
     this.id = opts.id ?? newId();
     this.startedAt = opts.startedAt.toISOString();
     this.level = opts.level;
+    if (opts.route) this.rs = { distM: 0, v: 0, done: false };
   }
 
   get samples(): Sample[] { return this._samples; }
@@ -52,6 +59,9 @@ export class Recorder {
   get elapsedS(): number { return this._samples.length; }
   get workout(): Workout | undefined { return this.opts.workout; }
   get ftp(): number { return this.opts.ftp ?? 200; }
+  get route(): Route | undefined { return this.opts.route; }
+  get routeState(): RouteState | undefined { return this.rs; }
+  get massKg(): number { return this.opts.massKg ?? 80; }
 
   setLevel(n: number): void { this.level = Math.min(8, Math.max(1, Math.round(n))); }
   pause(): void { this.manualPause = true; }
@@ -62,7 +72,10 @@ export class Recorder {
     const delta = input.distM >= this.lastInputDist ? input.distM - this.lastInputDist : input.distM;
     this.lastInputDist = input.distM;
     this._autoPaused = this.opts.autoPause && !input.sensorLost && !(input.speed > 0);
-    if (this.manualPause || this._autoPaused) return null;
+    if (this.manualPause || this._autoPaused) {
+      if (this.rs) this.rs.v = 0; // à l'arrêt, la vitesse virtuelle retombe
+      return null;
+    }
     this.dist += delta;
     const s: Sample = {
       t: this._samples.length + 1,
@@ -76,6 +89,16 @@ export class Recorder {
       const pos = stepAt(this.opts.workout.steps, this._samples.length);
       if (pos) s.step = pos.index;
     }
+    const route = this.opts.route;
+    if (route && this.rs && !this.rs.done) {
+      const v0 = this.rs.v;
+      const v1 = advanceSpeed(v0, s.power, gradeAt(route, this.rs.distM), this.massKg);
+      this.rs.v = v1;
+      this.rs.distM = Math.min(route.distanceM, this.rs.distM + (v0 + v1) / 2);
+      const p = positionAt(route, this.rs.distM);
+      Object.assign(s, { routeDistM: this.rs.distM, vSpeed: v1 * 3.6, lat: p.lat, lon: p.lon, ele: p.ele });
+      if (this.rs.distM >= route.distanceM) this.rs.done = true;
+    }
     this._samples.push(s);
     return s;
   }
@@ -85,11 +108,13 @@ export class Recorder {
       id: this.id, startedAt: this.startedAt, level: this.level, calib: this.opts.calib,
       hrMax: this.opts.hrMax, autoPause: this.opts.autoPause, paused: this.manualPause, samples: this._samples,
       ...(this.opts.workout ? { workout: this.opts.workout, ftp: this.ftp } : {}),
+      ...(this.opts.route ? { route: this.opts.route, massKg: this.massKg, routeState: { ...this.rs! } } : {}),
     };
   }
 
   static restore(d: Draft): Recorder {
-    const r = new Recorder({ id: d.id, startedAt: new Date(d.startedAt), level: d.level, calib: d.calib, hrMax: d.hrMax, autoPause: d.autoPause, workout: d.workout, ftp: d.ftp });
+    const r = new Recorder({ id: d.id, startedAt: new Date(d.startedAt), level: d.level, calib: d.calib, hrMax: d.hrMax, autoPause: d.autoPause, workout: d.workout, ftp: d.ftp, route: d.route, massKg: d.massKg });
+    if (d.route && d.routeState) r.rs = { ...d.routeState };
     r._samples = [...d.samples];
     r.dist = d.samples.length ? d.samples[d.samples.length - 1].distM : 0;
     r.manualPause = d.paused;
@@ -100,6 +125,17 @@ export class Recorder {
     const s: Session = { id: this.id, startedAt: this.startedAt, samples: this._samples, summary: summarize(this._samples, this.opts.hrMax) };
     const w = this.opts.workout;
     if (w) s.workout = { name: w.name, ftp: this.ftp, steps: w.steps, results: stepResults(this._samples, w.steps) };
+    const route = this.opts.route;
+    if (route && this.rs) {
+      let gain = 0, prev = route.points[0].ele;
+      for (const p of this._samples) {
+        if (p.ele == null) continue;
+        gain += Math.max(0, p.ele - prev);
+        prev = p.ele;
+      }
+      s.route = { id: route.id, name: route.name, distanceM: route.distanceM, gainM: route.gainM,
+        routeDistM: this.rs.distM, gainDoneM: gain, completed: this.rs.done };
+    }
     return s;
   }
 }

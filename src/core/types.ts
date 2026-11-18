@@ -15,6 +15,12 @@ export interface Sample {
   level: number;
   /** index de l'étape de la séance guidée */
   step?: number;
+  /** séance sur route : position sur la route (m), vitesse virtuelle (km/h), coordonnées */
+  routeDistM?: number;
+  vSpeed?: number;
+  lat?: number;
+  lon?: number;
+  ele?: number;
 }
 
 export type BestKey = '5' | '60' | '300' | '1200';
@@ -41,6 +47,27 @@ export interface Session {
   summary: Summary;
   stravaId?: number;
   workout?: SessionWorkout;
+  route?: SessionRoute;
+}
+
+export interface SessionRoute {
+  id: string;
+  name: string;
+  /** longueur totale de la route */
+  distanceM: number;
+  gainM: number;
+  /** distance parcourue sur la route */
+  routeDistM: number;
+  gainDoneM: number;
+  completed: boolean;
+}
+
+export interface RouteState {
+  /** position sur la route (m) */
+  distM: number;
+  /** vitesse virtuelle (m/s) */
+  v: number;
+  done: boolean;
 }
 
 export interface SessionWorkout {
@@ -61,6 +88,9 @@ export interface Draft {
   samples: Sample[];
   workout?: Workout;
   ftp?: number;
+  route?: Route;
+  massKg?: number;
+  routeState?: RouteState;
 }
 
 export interface Totals {
