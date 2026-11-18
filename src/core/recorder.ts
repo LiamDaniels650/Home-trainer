@@ -1,6 +1,6 @@
 import { bestAverage, estimatePower } from './power';
 import { BEST_KEYS, type Draft, type Route, type RouteState, type Sample, type Session, type Summary, type Workout } from './types';
-import { gradeAt, positionAt } from './gpx';
+import { climb, gradeAt, positionAt } from './gpx';
 import { advanceSpeed } from './physics';
 import { stepAt, stepResults } from './workout';
 import { hrZone } from './zones';
@@ -127,12 +127,7 @@ export class Recorder {
     if (w) s.workout = { name: w.name, ftp: this.ftp, steps: w.steps, results: stepResults(this._samples, w.steps) };
     const route = this.opts.route;
     if (route && this.rs) {
-      let gain = 0, prev = route.points[0].ele;
-      for (const p of this._samples) {
-        if (p.ele == null) continue;
-        gain += Math.max(0, p.ele - prev);
-        prev = p.ele;
-      }
+      const gain = climb([route.points[0].ele, ...this._samples.filter((p) => p.ele != null).map((p) => p.ele!)]);
       s.route = { id: route.id, name: route.name, distanceM: route.distanceM, gainM: route.gainM,
         routeDistM: this.rs.distM, gainDoneM: gain, completed: this.rs.done };
     }

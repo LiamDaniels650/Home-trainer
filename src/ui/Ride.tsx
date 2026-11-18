@@ -10,7 +10,8 @@ import { KIND_LABELS, powerStatus, speedForPower, targetWatts } from '../core/wo
 import { WorkoutProfile } from './WorkoutProfile';
 import type { RideView } from './ride';
 import { unlockAudio } from '../io/audio';
-import { gradeAt, positionAt, remainingGain, suggestLevel } from '../core/gpx';
+import { adviseLevel, gradeAt, positionAt, remainingGain } from '../core/gpx';
+import { useRef } from 'preact/hooks';
 import type { Route, RouteState } from '../core/types';
 import { RouteProfile, RouteTrace } from './RouteViews';
 
@@ -23,11 +24,13 @@ function gradeColor(g: number): string {
 
 function RoutePanel({ route, rs, level, baseLevel, onSetLevel }:
   { route: Route; rs: RouteState; level: number; baseLevel: number; onSetLevel: (n: number) => void }) {
+  const lastAdvice = useRef<number | null>(null);
   if (rs.done) {
     return <div class="card wk"><b>{route.name} terminée ✓</b><div class="small muted">{fmtKm(route.distanceM)} km bouclés. L'enregistrement continue en roue libre. Touche « Terminer » quand tu veux.</div></div>;
   }
   const grade = gradeAt(route, rs.distM);
-  const advice = suggestLevel(grade, baseLevel);
+  const advice = adviseLevel(grade, baseLevel, lastAdvice.current);
+  lastAdvice.current = advice;
   const here = positionAt(route, rs.distM);
   return (
     <div class="card wk">

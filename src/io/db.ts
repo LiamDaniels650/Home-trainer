@@ -130,9 +130,12 @@ const BAD_FILE = "Ce fichier n'est pas une sauvegarde valide de l'app Home Train
 
 const isNum = (v: unknown) => typeof v === 'number' && Number.isFinite(v);
 
+const optNum = (v: unknown) => v === undefined || isNum(v);
+
 function isSample(x: unknown): x is Sample {
   const p = x as Sample;
-  return !!p && isNum(p.t) && isNum(p.distM) && isNum(p.speed) && isNum(p.power) && isNum(p.level) && (p.hr === null || isNum(p.hr));
+  return !!p && isNum(p.t) && isNum(p.distM) && isNum(p.speed) && isNum(p.power) && isNum(p.level) && (p.hr === null || isNum(p.hr))
+    && optNum(p.step) && optNum(p.routeDistM) && optNum(p.vSpeed) && optNum(p.lat) && optNum(p.lon) && optNum(p.ele);
 }
 
 function isSession(x: unknown): x is Session {
@@ -143,14 +146,14 @@ function isSession(x: unknown): x is Session {
 
 function isRoute(x: unknown): x is Route {
   const r = x as Route;
-  return !!r && typeof r.id === 'string' && typeof r.name === 'string' && isNum(r.distanceM) && isNum(r.gainM)
-    && Array.isArray(r.points) && r.points.length >= 2
+  return !!r && typeof r.id === 'string' && typeof r.name === 'string' && isNum(r.distanceM) && r.distanceM > 0 && isNum(r.gainM)
+    && typeof r.hasElevation === 'boolean' && Array.isArray(r.points) && r.points.length >= 2
     && r.points.every((p) => isNum(p.lat) && isNum(p.lon) && isNum(p.ele) && isNum(p.d));
 }
 
 function isSessionRoute(x: unknown): x is SessionRoute {
   const r = x as SessionRoute;
-  return !!r && typeof r.id === 'string' && typeof r.name === 'string' && isNum(r.distanceM) && isNum(r.gainM)
+  return !!r && typeof r.id === 'string' && typeof r.name === 'string' && isNum(r.distanceM) && r.distanceM > 0 && isNum(r.gainM)
     && isNum(r.routeDistM) && isNum(r.gainDoneM) && typeof r.completed === 'boolean';
 }
 
@@ -184,6 +187,7 @@ export async function importAll(json: string): Promise<{ added: number; skipped:
     const summary = summarize(s.samples, hrMax);
     const clean: Session = { id: s.id, startedAt: s.startedAt, samples: s.samples, summary };
     if (isNum(s.stravaId)) clean.stravaId = s.stravaId;
+    if (s.stravaVirtual === true) clean.stravaVirtual = true;
     if (s.workout && isWorkout({ id: 'x', ...s.workout }) && isNum(s.workout.ftp)) {
       clean.workout = { name: s.workout.name, ftp: s.workout.ftp, steps: s.workout.steps, results: stepResults(s.samples, s.workout.steps) };
     }

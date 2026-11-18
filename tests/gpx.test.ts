@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, test } from 'vitest';
-import { gradeAt, parseGpx, positionAt, remainingGain, suggestLevel } from '../src/core/gpx';
+import { adviseLevel, gradeAt, parseGpx, positionAt, remainingGain, suggestLevel } from '../src/core/gpx';
 
 // ~111,2 m par 0,001° de latitude
 const trk = (pts: [number, number, number?][], name = 'Col test') => `<?xml version="1.0"?>
@@ -84,4 +84,61 @@ test('niveau conseillé', () => {
   expect(suggestLevel(-1.9, 3)).toBe(3);
   expect(suggestLevel(-2.5, 3)).toBe(2);
   expect(suggestLevel(-8, 1)).toBe(1);
+});
+
+describe('corrections relecture', () => {
+  test("altitude GPS bruitée : pas de faux pics de pente ni de D+ gonflé", () => {
+    // 2 km plat à 100 m, bruit de ±4 m tous les 10 m
+    const pts: [number, number, number][] = Array.from({ length: 201 }, (_, i) => [45 + (i * 10) / 111195, 6, 100 + (i % 2 ? 4 : -4)]);
+    const r = parseGpx(trk(pts));
+    expect(r.gainM).toBeLessThan(5);
+    let maxAbs = 0;
+    for (let d = 0; d < r.distanceM; d += 10) maxAbs = Math.max(maxAbs, Math.abs(gradeAt(r, d)));
+    expect(maxAbs).toBeLessThan(2);
+  });
+  test('une vraie montée reste une montée', () => {
+    const pts: [number, number, number][] = Array.from({ length: 201 }, (_, i) => [45 + (i * 10) / 111195, 6, 100 + i * 0.7 + (i % 2 ? 2 : -2)]);
+    const r = parseGpx(trk(pts));
+    expect(r.gainM).toBeGreaterThan(125);
+    expect(r.gainM).toBeLessThan(150);
+    expect(gradeAt(r, 1000)).toBeCloseTo(7, 0);
+  });
+  test('lat/lon absents ou altitude vide : point ignoré, pas de (0,0) ni de chute à 0 m', () => {
+    const xml = `<gpx><trk><trkseg>
+      <trkpt lat="45" lon="6"><ele>100</ele></trkpt>
+      <trkpt lon="6"><ele>100</ele></trkpt>
+      <trkpt lat="45.001" lon="6"><ele></ele></trkpt>
+      <trkpt lat="45.002" lon="6"><ele>100</ele></trkpt>
+    </trkseg></trk></gpx>`;
+    const r = parseGpx(xml);
+    expect(r.distanceM).toBeLessThan(300);
+    expect(r.points.every((p) => p.ele === 100)).toBe(true);
+  });
+  test('nom : celui de la trace, pas celui d\'un point de passage', () => {
+    const xml = `<gpx><metadata></metadata><wpt lat="45" lon="6"><name>Boulangerie</name></wpt>
+      <trk><name>Tour du lac</name><trkseg><trkpt lat="45" lon="6"/><trkpt lat="45.01" lon="6"/></trkseg></trk></gpx>`;
+    expect(parseGpx(xml).name).toBe('Tour du lac');
+  });
+  test('nom des métadonnées en priorité', () => {
+    const xml = `<gpx><metadata><name>Sortie du dimanche</name></metadata>
+      <trk><name>Trace 1</name><trkseg><trkpt lat="45" lon="6"/><trkpt lat="45.01" lon="6"/></trkseg></trk></gpx>`;
+    expect(parseGpx(xml).name).toBe('Sortie du dimanche');
+  });
+});
+
+describe('conseil de niveau stable', () => {
+  test('pas de changement pour une pente qui oscille autour du seuil', () => {
+    expect(adviseLevel(2.2, 3, 3)).toBe(3); // juste au-dessus de 2 % : on garde 3
+    expect(adviseLevel(2.6, 3, 3)).toBe(4); // nettement au-dessus : 4
+    expect(adviseLevel(1.8, 3, 4)).toBe(4); // juste en dessous : on garde 4
+    expect(adviseLevel(1.4, 3, 4)).toBe(3);
+    expect(adviseLevel(-2.3, 3, 3)).toBe(3);
+    expect(adviseLevel(-2.6, 3, 3)).toBe(2);
+  });
+  test('sans conseil précédent : niveau direct', () => {
+    expect(adviseLevel(2.2, 3, null)).toBe(4);
+  });
+  test('grand changement de pente : effet immédiat', () => {
+    expect(adviseLevel(9, 3, 3)).toBe(7);
+  });
 });

@@ -46,6 +46,8 @@ export interface Session {
   samples: Sample[];
   summary: Summary;
   stravaId?: number;
+  /** séance sur route : passage en « Vélo virtuel » confirmé par Strava */
+  stravaVirtual?: boolean;
   workout?: SessionWorkout;
   route?: SessionRoute;
 }

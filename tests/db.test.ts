@@ -161,3 +161,14 @@ test('migration : une base v2 existante garde ses séances guidées', async () =
   expect((await db.listWorkouts()).map((w) => w.id)).toEqual(['w']);
   expect(await db.listRoutes()).toEqual([]);
 });
+
+test('import : champs de route des échantillons vérifiés', async () => {
+  const s = { ...sess('b1', '2026-11-03T10:00:00Z'), samples: [{ t: 1, distM: 8, speed: 30, hr: null, power: 213, level: 3, lat: 'x' }] };
+  await expect(db.importAll(JSON.stringify({ app: 'home-trainer', version: 1, sessions: [s] }))).rejects.toThrow(/fichier/i);
+});
+
+test('import : route de séance de longueur nulle ignorée', async () => {
+  const s = { ...sess('b2', '2026-11-03T10:00:00Z'), route: { id: 'r', name: 'R', distanceM: 0, gainM: 0, routeDistM: 0, gainDoneM: 0, completed: false } };
+  await db.importAll(JSON.stringify({ app: 'home-trainer', version: 1, sessions: [s] }));
+  expect((await db.getSession('b2'))!.route).toBeUndefined();
+});
