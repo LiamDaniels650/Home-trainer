@@ -10,7 +10,7 @@ import { KIND_LABELS, powerStatus, speedForPower, targetWatts } from '../core/wo
 import { WorkoutProfile } from './WorkoutProfile';
 import type { RideView } from './ride';
 import { unlockAudio } from '../io/audio';
-import { adviseLevel, gradeAt, positionAt, remainingGain } from '../core/gpx';
+import { ADVICE_LOOKAHEAD_M, adviseLevel, gradeAt, positionAt, remainingGain } from '../core/gpx';
 import { useRef } from 'preact/hooks';
 import type { Route, RouteState } from '../core/types';
 import { RouteProfile, RouteTrace } from './RouteViews';
@@ -25,12 +25,15 @@ function gradeColor(g: number): string {
 function RoutePanel({ route, rs, level, baseLevel, onSetLevel }:
   { route: Route; rs: RouteState; level: number; baseLevel: number; onSetLevel: (n: number) => void }) {
   const lastAdvice = useRef<number | null>(null);
+  const changedAt = useRef(0);
   if (rs.done) {
     return <div class="card wk"><b>{route.name} terminée ✓</b><div class="small muted">{fmtKm(route.distanceM)} km bouclés. L'enregistrement continue en roue libre. Touche « Terminer » quand tu veux.</div></div>;
   }
   const grade = gradeAt(route, rs.distM);
-  const advice = adviseLevel(grade, baseLevel, lastAdvice.current);
-  lastAdvice.current = advice;
+  // conseil calculé sur les 300 m à venir, et stabilisé (voir adviseLevel)
+  const now = Date.now();
+  const advice = adviseLevel(gradeAt(route, rs.distM, ADVICE_LOOKAHEAD_M), baseLevel, lastAdvice.current, (now - changedAt.current) / 1000);
+  if (advice !== lastAdvice.current) { lastAdvice.current = advice; changedAt.current = now; }
   const here = positionAt(route, rs.distM);
   return (
     <div class="card wk">

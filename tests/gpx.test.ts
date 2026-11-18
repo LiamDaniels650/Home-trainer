@@ -127,18 +127,46 @@ describe('corrections relecture', () => {
 });
 
 describe('conseil de niveau stable', () => {
-  test('pas de changement pour une pente qui oscille autour du seuil', () => {
-    expect(adviseLevel(2.2, 3, 3)).toBe(3); // juste au-dessus de 2 % : on garde 3
-    expect(adviseLevel(2.6, 3, 3)).toBe(4); // nettement au-dessus : 4
-    expect(adviseLevel(1.8, 3, 4)).toBe(4); // juste en dessous : on garde 4
-    expect(adviseLevel(1.4, 3, 4)).toBe(3);
-    expect(adviseLevel(-2.3, 3, 3)).toBe(3);
-    expect(adviseLevel(-2.6, 3, 3)).toBe(2);
+  test('pente qui oscille autour du seuil : il faut 1 % de marge pour changer', () => {
+    expect(adviseLevel(2.6, 3, 3, 60)).toBe(3);
+    expect(adviseLevel(3.1, 3, 3, 60)).toBe(4);
+    expect(adviseLevel(1.4, 3, 4, 60)).toBe(4);
+    expect(adviseLevel(0.9, 3, 4, 60)).toBe(3);
+    expect(adviseLevel(-2.6, 3, 3, 60)).toBe(3);
+    expect(adviseLevel(-3.1, 3, 3, 60)).toBe(2);
   });
-  test('sans conseil précédent : niveau direct', () => {
-    expect(adviseLevel(2.2, 3, null)).toBe(4);
+  test('au moins 45 s entre deux conseils', () => {
+    expect(adviseLevel(3.5, 3, 3, 44)).toBe(3);
+    expect(adviseLevel(3.5, 3, 3, 45)).toBe(4);
+    expect(adviseLevel(5.5, 3, 3, 10)).toBe(3); // 2 niveaux d'écart : on attend
   });
   test('grand changement de pente : effet immédiat', () => {
-    expect(adviseLevel(9, 3, 3)).toBe(7);
+    expect(adviseLevel(9, 3, 3, 2)).toBe(7);
+    expect(adviseLevel(-5, 3, 6, 2)).toBe(2);
+  });
+  test('sans conseil précédent : niveau direct', () => {
+    expect(adviseLevel(2.2, 3, null, 0)).toBe(4);
+  });
+  test('route vallonnée : pas plus d\'un changement toutes les 45 s', () => {
+    let prev: number | null = null, held = 0, changes = 0;
+    for (let t = 0; t < 600; t++) {
+      const g = 2.5 + 1.5 * Math.sin(t / 3); // pente qui oscille entre 1 et 4 %
+      const a = adviseLevel(g, 3, prev, held);
+      if (prev != null && a !== prev) { changes++; held = 0; } else held++;
+      prev = a;
+    }
+    expect(changes).toBeLessThanOrEqual(600 / 45);
+  });
+});
+
+describe('dénivelé d\'un fichier propre', () => {
+  test('petites bosses régulières (sans bruit) : le D+ est presque entièrement compté', () => {
+    // 5 km, bosses de 5 m (± 2,5 m) tous les 300 m, points tous les 20 m : environ 16 bosses × 5 m = 83 m
+    const pts: [number, number, number][] = Array.from({ length: 251 }, (_, i) => [45 + (i * 20) / 111195, 6, 100 + 2.5 * Math.sin((2 * Math.PI * i * 20) / 300)]);
+    const r = parseGpx(trk(pts));
+    let truth = 0;
+    for (let i = 1; i < pts.length; i++) truth += Math.max(0, pts[i][2] - pts[i - 1][2]);
+    expect(r.gainM).toBeGreaterThan(truth * 0.85);
+    expect(r.gainM).toBeLessThanOrEqual(truth + 0.5);
   });
 });

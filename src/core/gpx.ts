@@ -1,10 +1,21 @@
 import type { Route, RoutePoint } from './types';
 
 const MIN_SPACING_M = 5;
-/** demi-largeur du lissage de l'altitude (m) : efface le bruit GPS sans aplatir les vraies pentes */
-const SMOOTH_HALF_M = 50;
-/** une montée n'est comptée dans le D+ qu'à partir de 3 m (évite de cumuler le bruit) */
-const CLIMB_THRESHOLD_M = 3;
+/**
+ * Lissage de l'altitude (demi-largeur, m) : léger pour un fichier propre (itinéraire calculé sur un modèle de terrain),
+ * fort pour une trace GPS bruitée. Le fichier est jugé bruité si un lissage fort lui fait perdre plus de 25 % de D+.
+ */
+const SMOOTH_LIGHT_M = 10;
+const SMOOTH_STRONG_M = 50;
+/** une variation d'altitude de moins de 1 m dans l'autre sens ne coupe pas une montée */
+const CLIMB_THRESHOLD_M = 1;
+/** conseil de niveau : marge de pente pour changer, temps minimal entre deux conseils */
+const ADVICE_MARGIN_PCT = 1;
+const ADVICE_HOLD_S = 45;
+/** écart de niveau qui justifie un conseil immédiat (vraie montée ou descente) */
+const ADVICE_JUMP = 3;
+/** distance sur laquelle la pente est mesurée pour le conseil de niveau */
+export const ADVICE_LOOKAHEAD_M = 300;
 const MAX_POINTS = 5000;
 const R_EARTH = 6371000;
 
@@ -66,8 +77,12 @@ export function parseGpx(xml: string, fallbackName = 'Route'): Route {
   }
   if (points.length < 2) throw new Error('Le fichier GPX ne contient pas assez de points pour faire une route.');
 
-  smoothElevation(points);
-  const gainM = climb(points.map((p) => p.ele));
+  const before = points.map((p) => p.ele);
+  const strong = smoothed(points, SMOOTH_STRONG_M);
+  const noisy = climb(strong) < 0.75 * climb(before, 0);
+  const final = noisy ? strong : smoothed(points, SMOOTH_LIGHT_M);
+  points.forEach((p, i) => { p.ele = final[i]; });
+  const gainM = climb(final);
 
   // nom : métadonnées, puis trace, puis itinéraire (jamais celui d'un point de passage)
   const childName = (el: Element | undefined) => [...(el?.children ?? [])].find((c) => c.localName === 'name')?.textContent?.trim();
@@ -76,26 +91,33 @@ export function parseGpx(xml: string, fallbackName = 'Route'): Route {
   return { id: newId(), name, points, distanceM: points[points.length - 1].d, gainM, hasElevation };
 }
 
-/** Moyenne glissante de l'altitude sur ±50 m (en place). */
-function smoothElevation(points: RoutePoint[]): void {
-  const src = points.map((p) => p.ele);
+/** Altitudes lissées par moyenne glissante sur ±half mètres. */
+function smoothed(points: RoutePoint[], half: number): number[] {
+  const out: number[] = [];
   let lo = 0, hi = 0, sum = 0;
   for (let i = 0; i < points.length; i++) {
-    while (hi < points.length && points[hi].d - points[i].d <= SMOOTH_HALF_M) sum += src[hi++];
-    while (points[i].d - points[lo].d > SMOOTH_HALF_M) sum -= src[lo++];
-    points[i].ele = sum / (hi - lo);
+    while (hi < points.length && points[hi].d - points[i].d <= half) sum += points[hi++].ele;
+    while (points[i].d - points[lo].d > half) sum -= points[lo++].ele;
+    out.push(sum / (hi - lo));
   }
+  return out;
 }
 
-/** Dénivelé positif avec seuil : les variations de moins de 3 m ne s'additionnent pas. */
-export function climb(eles: number[]): number {
+/**
+ * Dénivelé positif avec hystérésis : chaque montée est comptée en entier (du creux au sommet),
+ * mais une descente de moins de `threshold` mètres ne la coupe pas, et ne crée pas de fausse montée.
+ */
+export function climb(eles: number[], threshold = CLIMB_THRESHOLD_M): number {
   if (!eles.length) return 0;
-  let gain = 0, ref = eles[0];
+  let up = true, valley = eles[0], peak = eles[0], gain = 0;
   for (const e of eles) {
-    if (e < ref) ref = e;
-    else if (e - ref >= CLIMB_THRESHOLD_M) { gain += e - ref; ref = e; }
+    if (up) {
+      if (e > peak) peak = e;
+      else if (e < peak - threshold) { gain += peak - valley; valley = e; up = false; }
+    } else if (e < valley) valley = e;
+    else if (e > valley + threshold) { up = true; peak = e; }
   }
-  return gain + Math.max(0, eles[eles.length - 1] - ref);
+  return up ? gain + (peak - valley) : gain;
 }
 
 /** Index du tronçon [i, i+1] qui contient la distance d. */
@@ -140,12 +162,15 @@ export function suggestLevel(gradePct: number, baseLevel: number): number {
 }
 
 /**
- * Conseil de niveau stable : on ne change le conseil précédent que si la pente
- * dépasse le seuil d'au moins 0,5 % (évite un bouton qui clignote autour d'un seuil).
+ * Conseil de niveau stable, pour ne pas faire bouger la manette sans arrêt :
+ * - la pente doit dépasser le seuil d'au moins 1 % pour changer de conseil ;
+ * - au moins 45 s entre deux conseils, sauf écart de 3 niveaux ou plus (vraie montée ou descente).
+ * Réglages choisis sur un parcours réel de 43 km : environ un conseil toutes les 1 min 30.
  */
-export function adviseLevel(gradePct: number, baseLevel: number, previous: number | null): number {
+export function adviseLevel(gradePct: number, baseLevel: number, previous: number | null, heldS: number): number {
   const now = suggestLevel(gradePct, baseLevel);
   if (previous == null || now === previous) return now;
-  if (now > previous) return suggestLevel(gradePct - 0.5, baseLevel) > previous ? now : previous;
-  return suggestLevel(gradePct + 0.5, baseLevel) < previous ? now : previous;
+  if (Math.abs(now - previous) < ADVICE_JUMP && heldS < ADVICE_HOLD_S) return previous;
+  if (now > previous) return Math.max(previous, suggestLevel(gradePct - ADVICE_MARGIN_PCT, baseLevel));
+  return Math.min(previous, suggestLevel(gradePct + ADVICE_MARGIN_PCT, baseLevel));
 }
